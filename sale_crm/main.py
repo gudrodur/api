@@ -1,22 +1,39 @@
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel, EmailStr
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from fastapi.security import OAuth2PasswordBearer
+# ==========================
+# Standard Library Imports
+# ==========================
 import os
-from sqlalchemy import Column, Integer, String, DateTime, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from datetime import datetime, timedelta
+
+# ==========================
+# Third-Party Library Imports
+# ==========================
+
+## FastAPI Core
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+## Pydantic for Data Validation
+from pydantic import BaseModel, EmailStr
+
+## Authentication & Security
+from jose import JWTError, jwt
 from passlib.context import CryptContext
+
+## SQLAlchemy ORM & Database Handling
+from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.future import select
+from sqlalchemy.orm import sessionmaker
 
 # ==========================
 # Database Connection
 # ==========================
 
-DATABASE_URL = "sqlite:///./phone_sales.db"
+DATABASE_URL = "postgresql+asyncpg://postgres:adminpass@localhost/phone_sales"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_async_engine(DATABASE_URL, echo=True)
+SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 Base = declarative_base()
 
@@ -24,7 +41,19 @@ Base = declarative_base()
 # Initialize FastAPI Application
 # ==========================
 
-app = FastAPI()
+app = FastAPI(
+    title="My Sales CRM API",
+    description="This is the API for our Sales CRM system.",
+    version="1.0.0",
+    contact={
+        "name": "Support",
+        "email": "support@example.com",
+    },
+    openapi_tags=[
+        {"name": "Users", "description": "Operations related to users"},
+        {"name": "Sales", "description": "Operations related to sales"},
+    ],
+)
 
 # ==========================
 # Authentication Settings
@@ -35,7 +64,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 # ==========================
 # Database Models
@@ -58,13 +87,11 @@ class UserDB(Base):
 # Utility Functions
 # ==========================
 
-def get_db():
+async def get_db():
     """Dependency to get the database session"""
-    db = SessionLocal()
-    try:
+    async with SessionLocal() as db:
         yield db
-    finally:
-        db.close()
+
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     """Function to create a JWT token"""
@@ -73,25 +100,45 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+
 def verify_password(plain_password, hashed_password):
     """Verifies a plaintext password against a hashed password"""
     return pwd_context.verify(plain_password, hashed_password)
+
 
 def hash_password(password: str):
     """Hashes a password using bcrypt"""
     return pwd_context.hash(password)
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Extract user info from JWT token"""
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        user = db.query(UserDB).filter(UserDB.username == username).first()
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=403, detail="Invalid token")
+
+        result = await db.execute(select(UserDB).where(UserDB.username == username))
+        user = result.scalars().first()
+
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return user
     except JWTError:
         raise HTTPException(status_code=403, detail="Could not validate credentials")
+
+
+@app.post("/auth/token")
+async def login_for_access_token(db: AsyncSession = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+    """Authenticate user and return a JWT token."""
+    result = await db.execute(select(UserDB).where(UserDB.username == form_data.username))
+    user = result.scalars().first()
+
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 # ==========================
 # Pydantic Schemas
@@ -105,6 +152,7 @@ class UserCreate(BaseModel):
     password: str
     role: str = "salesperson"
 
+
 class UserUpdate(BaseModel):
     """Schema for updating user profile"""
     email: EmailStr
@@ -115,10 +163,10 @@ class UserUpdate(BaseModel):
 # ==========================
 
 @app.post("/users/")
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    """Endpoint to create a new user with a unique username"""
+async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserDB).filter((UserDB.username == user.username) | (UserDB.email == user.email)))
+    existing_user = result.scalars().first()
 
-    existing_user = db.query(UserDB).filter((UserDB.username == user.username) | (UserDB.email == user.email)).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username or email already exists!")
 
@@ -128,28 +176,28 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     )
 
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
 
     return {"message": f"User {db_user.username} created successfully", "role": db_user.role}
 
+
 @app.put("/users/{user_id}")
-def update_user(user_id: int, user_data: UserUpdate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+async def update_user(user_id: int, user_data: UserUpdate, db: AsyncSession = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     """Endpoint to update user profile (email & full_name)"""
 
-    # Check if user exists
-    db_user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    result = await db.execute(select(UserDB).where(UserDB.id == user_id))
+    db_user = result.scalars().first()
+
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check if the current user is allowed to update this profile
     if current_user.id != user_id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="You can only update your own profile")
 
-    # Update fields
     db_user.full_name = user_data.full_name
     db_user.email = user_data.email
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
 
     return {"message": "User profile updated successfully"}
