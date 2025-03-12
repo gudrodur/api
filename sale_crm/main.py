@@ -25,6 +25,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.future import select
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql.expression import or_  # Fixing OR filtering issue
 
 # ==========================
 # Database Connection
@@ -112,6 +113,7 @@ def hash_password(password: str):
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    """Retrieve the current logged-in user from the JWT token."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -164,7 +166,8 @@ class UserUpdate(BaseModel):
 
 @app.post("/users/")
 async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(UserDB).filter((UserDB.username == user.username) | (UserDB.email == user.email)))
+    """Create a new user in the database."""
+    result = await db.execute(select(UserDB).where(or_(UserDB.username == user.username, UserDB.email == user.email)))
     existing_user = result.scalars().first()
 
     if existing_user:
@@ -185,7 +188,6 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
 @app.put("/users/{user_id}")
 async def update_user(user_id: int, user_data: UserUpdate, db: AsyncSession = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     """Endpoint to update user profile (email & full_name)"""
-
     result = await db.execute(select(UserDB).where(UserDB.id == user_id))
     db_user = result.scalars().first()
 
@@ -201,3 +203,14 @@ async def update_user(user_id: int, user_data: UserUpdate, db: AsyncSession = De
     await db.refresh(db_user)
 
     return {"message": "User profile updated successfully"}
+
+
+@app.get("/users/me")
+async def get_current_user_info(current_user: UserDB = Depends(get_current_user)):
+    """Fetch the currently authenticated user's information."""
+    return {
+        "username": current_user.username,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role,
+    }
