@@ -1,0 +1,59 @@
+# Ignore Python bytecode and compiled files
+__pycache__/
+*.py[cod]
+*.so
+
+# Ignore virtual environment
+venv/
+.env
+*.env
+
+# Ignore SQLite database and migrations
+*.sqlite3
+*.db
+*.sqlite
+alembic/versions/
+
+# Ignore logs and cache files
+logs/
+*.log
+*.out
+*.err
+*.pid
+*.swp
+*.swo
+
+# Ignore Python test & coverage files
+.coverage
+.tox/
+.nox/
+pytest_cache/
+htmlcov/
+
+# Ignore IDE/editor config files
+.vscode/
+.idea/
+*.iml
+
+# Ignore build and distribution files
+dist/
+build/
+*.egg-info/
+
+# Ignore Uvicorn and FastAPI temporary files
+instance/
+config.json
+config.yaml
+
+# Ignore node_modules (if using frontend)
+node_modules/
+
+# Ignore Docker files (if applicable)
+.dockerignore
+docker-compose.override.yml
+
+# Ignore MacOS system files
+.DS_Store
+
+# Ignore Windows system files
+Thumbs.db
