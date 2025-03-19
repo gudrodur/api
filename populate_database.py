@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 from sqlalchemy.future import select
 from setup_db import (
-    User, ContactList, Sale, SaleStatus, SalesOutcome, Call, SaleContact, SessionLocal
+    UserDB, ContactList, SaleDB, SaleStatus, SalesOutcome, CallDB, SaleContact, SessionLocal
 )
 
 # Initialize Faker
@@ -19,7 +19,7 @@ def utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 async def insert_data():
-    """Reads names & national IDs from CSV, then populates all tables in phone_sales.db."""
+    """Reads names & national IDs from CSV, then populates all tables in PostgreSQL."""
     try:
         # Load CSV (force column 8 to string to avoid DtypeWarning)
         df = pd.read_csv(CSV_FILE_PATH, delimiter=",", encoding="utf-8", on_bad_lines="skip", dtype={8: str})
@@ -37,8 +37,8 @@ async def insert_data():
         async with SessionLocal() as session:
             # ✅ Insert Sale Statuses if they don't exist
             existing_statuses = await session.execute(select(SaleStatus.name))
-            existing_statuses = {row[0] for row in existing_statuses.fetchall()}
-            
+            existing_statuses = {row[0] for row in existing_statuses.scalars().all()}
+
             new_statuses = ["Pending", "Completed", "Cancelled"]
             statuses_to_add = [SaleStatus(name=status) for status in new_statuses if status not in existing_statuses]
 
@@ -49,8 +49,8 @@ async def insert_data():
 
             # ✅ Insert Sales Outcomes if they don't exist
             existing_outcomes = await session.execute(select(SalesOutcome.description))
-            existing_outcomes = {row[0] for row in existing_outcomes.fetchall()}
-            
+            existing_outcomes = {row[0] for row in existing_outcomes.scalars().all()}
+
             new_outcomes = ["Success", "Failure", "Follow-Up Required"]
             outcomes_to_add = [SalesOutcome(description=outcome) for outcome in new_outcomes if outcome not in existing_outcomes]
 
@@ -61,8 +61,8 @@ async def insert_data():
 
         async with SessionLocal() as session:
             # ✅ Insert Users (Sales agents) only if they don't exist
-            existing_users = await session.execute(select(User.username))
-            existing_users = {row[0] for row in existing_users.fetchall()}
+            existing_users = await session.execute(select(UserDB.username))
+            existing_users = {row[0] for row in existing_users.scalars().all()}
 
             users = []
             for _, row in df.iterrows():
@@ -70,7 +70,7 @@ async def insert_data():
                 username = full_name.replace(" ", "").lower()
 
                 if username not in existing_users:
-                    user = User(
+                    user = UserDB(
                         username=username,
                         email=f"{username}@example.com",
                         full_name=full_name,
@@ -90,7 +90,7 @@ async def insert_data():
         async with SessionLocal() as session:
             # ✅ Insert Contacts (Customers) only if they don't exist
             existing_contacts = await session.execute(select(ContactList.name))
-            existing_contacts = {row[0] for row in existing_contacts.fetchall()}
+            existing_contacts = {row[0] for row in existing_contacts.scalars().all()}
 
             contacts = []
             for _, row in df.iterrows():
