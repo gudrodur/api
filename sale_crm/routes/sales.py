@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
-from typing import List, Optional
+from sqlalchemy.exc import IntegrityError
 import logging
 from datetime import datetime
-import traceback
+from typing import List, Optional
 
 from sale_crm.models import SaleDB, UserDB, ContactList, SaleStatus, SalesOutcomes
 from sale_crm.schemas import SaleCreate, SaleResponse
@@ -14,11 +14,11 @@ from sale_crm.auth import get_current_user
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
 
-# Initialize logger
+# ✅ Initialize logger
 logger = logging.getLogger(__name__)
 
 # ==========================
-# Create a New Sale
+# ✅ Create a New Sale
 # ==========================
 @router.post("/", response_model=SaleResponse)
 async def create_sale(
@@ -28,33 +28,39 @@ async def create_sale(
 ):
     """Creates a new sale after validating user, contact, and status."""
     try:
-        # Validate user existence
-        result = await db.execute(select(UserDB).where(UserDB.id == sale.user_id))
-        user = result.scalars().first()
+        # ✅ Validate user existence
+        user = await db.get(UserDB, sale.user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found.")
 
-        # Validate contact existence
-        result = await db.execute(select(ContactList).where(ContactList.id == sale.contact_id))
-        contact = result.scalars().first()
+        # ✅ Validate contact existence
+        contact = await db.get(ContactList, sale.contact_id)
         if not contact:
             raise HTTPException(status_code=404, detail="Contact not found.")
 
-        # Validate sale status
-        result = await db.execute(select(SaleStatus).where(SaleStatus.id == sale.status_id))
-        status = result.scalars().first()
+        # ✅ Validate sale status
+        status = await db.get(SaleStatus, sale.status_id)
         if not status:
             raise HTTPException(status_code=404, detail="Sale status not found.")
 
-        # Validate outcome (if provided)
-        outcome = None
+        # ✅ Validate outcome (if provided)
         if sale.outcome_id:
-            result = await db.execute(select(SalesOutcomes).where(SalesOutcomes.id == sale.outcome_id))
-            outcome = result.scalars().first()
+            outcome = await db.get(SalesOutcomes, sale.outcome_id)
             if not outcome:
                 raise HTTPException(status_code=404, detail="Sale outcome not found.")
 
-        # ✅ No need for manual datetime conversion (Pydantic does it)
+        # ✅ Prevent duplicate sales
+        existing_sale = await db.execute(
+            select(SaleDB)
+            .where(SaleDB.user_id == sale.user_id, SaleDB.contact_id == sale.contact_id)
+        )
+        if existing_sale.scalars().first():
+            raise HTTPException(status_code=409, detail="A sale already exists for this user and contact.")
+
+        # ✅ Validate sale amount (ensure non-negative values)
+        if sale.sale_amount < 0:
+            raise HTTPException(status_code=400, detail="Sale amount cannot be negative.")
+
         new_sale = SaleDB(
             user_id=sale.user_id,
             contact_id=sale.contact_id,
@@ -69,17 +75,26 @@ async def create_sale(
         await db.commit()
         await db.refresh(new_sale)
 
+        logger.info(f"✅ Sale {new_sale.id} created by user {current_user.username}.")
+
         return new_sale
 
     except HTTPException as http_exc:
+        await db.rollback()
         raise http_exc  # Keep existing HTTPExceptions
+
+    except IntegrityError as e:
+        await db.rollback()
+        logger.error(f"❌ IntegrityError: {e}")
+        raise HTTPException(status_code=400, detail="Database integrity error while creating sale.")
+
     except Exception as e:
-        error_message = f"Error creating sale: {str(e)}\n{traceback.format_exc()}"
-        logger.error(error_message)
-        raise HTTPException(status_code=500, detail=error_message)
+        await db.rollback()
+        logger.error(f"❌ Unexpected Error in create_sale: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while creating sale.")
 
 # ==========================
-# Get All Sales (Admin Only)
+# ✅ Get All Sales (Admin Only)
 # ==========================
 @router.get("/", response_model=List[SaleResponse])
 async def get_all_sales(
@@ -88,7 +103,6 @@ async def get_all_sales(
 ):
     """Retrieve all sales (Admin access required)."""
     if current_user.role != "admin":
-        logger.warning(f"Unauthorized access attempt by {current_user.username}.")
         raise HTTPException(status_code=403, detail="You do not have permission to view all sales.")
 
     result = await db.execute(
@@ -100,7 +114,7 @@ async def get_all_sales(
     return sales
 
 # ==========================
-# Get a Sale by ID
+# ✅ Get a Sale by ID
 # ==========================
 @router.get("/{sale_id}", response_model=SaleResponse)
 async def get_sale_by_id(
@@ -109,22 +123,18 @@ async def get_sale_by_id(
     current_user: UserDB = Depends(get_current_user)
 ):
     """Retrieve a sale by its ID (Users can only view their own sales, admins can view all)."""
-    result = await db.execute(select(SaleDB).where(SaleDB.id == sale_id))
-    sale = result.scalars().first()
+    sale = await db.get(SaleDB, sale_id)
 
     if not sale:
-        logger.error(f"Sale retrieval failed: Sale ID {sale_id} not found.")
         raise HTTPException(status_code=404, detail="Sale not found.")
 
     if current_user.role != "admin" and sale.user_id != current_user.id:
-        logger.warning(f"Unauthorized access attempt on Sale ID {sale_id} by {current_user.username}.")
         raise HTTPException(status_code=403, detail="You do not have permission to view this sale.")
 
-    logger.info(f"User {current_user.username} accessed Sale ID {sale_id}.")
     return sale
 
 # ==========================
-# Update a Sale
+# ✅ Update a Sale
 # ==========================
 @router.put("/{sale_id}", response_model=SaleResponse)
 async def update_sale(
@@ -134,18 +144,18 @@ async def update_sale(
     current_user: UserDB = Depends(get_current_user)
 ):
     """Update sale details (Users can update their own sales, admins can update any sale)."""
-    result = await db.execute(select(SaleDB).where(SaleDB.id == sale_id))
-    sale = result.scalars().first()
+    sale = await db.get(SaleDB, sale_id)
 
     if not sale:
-        logger.error(f"Sale update failed: Sale ID {sale_id} not found.")
         raise HTTPException(status_code=404, detail="Sale not found.")
 
     if current_user.role != "admin" and sale.user_id != current_user.id:
-        logger.warning(f"Unauthorized update attempt on Sale ID {sale_id} by {current_user.username}.")
         raise HTTPException(status_code=403, detail="You do not have permission to update this sale.")
 
-    # ✅ Ensure all fields are updated
+    # ✅ Validate sale amount
+    if updated_sale.sale_amount < 0:
+        raise HTTPException(status_code=400, detail="Sale amount cannot be negative.")
+
     sale.contact_id = updated_sale.contact_id
     sale.status_id = updated_sale.status_id
     sale.outcome_id = updated_sale.outcome_id
@@ -156,11 +166,11 @@ async def update_sale(
     await db.commit()
     await db.refresh(sale)
 
-    logger.info(f"Sale ID {sale.id} updated by user {current_user.username}.")
+    logger.info(f"✅ Sale ID {sale.id} updated by {current_user.username}.")
     return sale
 
 # ==========================
-# Delete a Sale
+# ✅ Delete a Sale
 # ==========================
 @router.delete("/{sale_id}")
 async def delete_sale(
@@ -169,19 +179,16 @@ async def delete_sale(
     current_user: UserDB = Depends(get_current_user)
 ):
     """Delete a sale (Users can delete their own sales, admins can delete any sale)."""
-    result = await db.execute(select(SaleDB).where(SaleDB.id == sale_id))
-    sale = result.scalars().first()
+    sale = await db.get(SaleDB, sale_id)
 
     if not sale:
-        logger.error(f"Sale deletion failed: Sale ID {sale_id} not found.")
         raise HTTPException(status_code=404, detail="Sale not found.")
 
     if current_user.role != "admin" and sale.user_id != current_user.id:
-        logger.warning(f"Unauthorized delete attempt on Sale ID {sale_id} by {current_user.username}.")
         raise HTTPException(status_code=403, detail="You do not have permission to delete this sale.")
 
     await db.delete(sale)
     await db.commit()
 
-    logger.info(f"Sale ID {sale_id} deleted by user {current_user.username}.")
+    logger.info(f"✅ Sale ID {sale_id} deleted by {current_user.username}.")
     return {"message": "Sale deleted successfully"}
