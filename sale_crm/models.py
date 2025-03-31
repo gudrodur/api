@@ -15,12 +15,15 @@ class CallDB(Base):
     duration = Column(Integer, nullable=False)
     call_time = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     status = Column(String, default="pending", nullable=False)
+    disposition = Column(String(50), nullable=True)  # ✅ Nýr dálkur til að halda utan um "disposition"
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     user = relationship("UserDB", back_populates="calls")
     contact = relationship("ContactList", back_populates="calls")
+
+
 
 # ==========================
 # Contact Status Table
@@ -133,3 +136,18 @@ class SalesOutcomes(Base):
     description = Column(String, nullable=False)
 
     sales = relationship("SaleDB", back_populates="outcome", cascade="all, delete-orphan")
+
+# ==========================
+# Sale Contact Table (Many-to-Many Relationship)
+# ==========================
+class SaleContact(Base):
+    """SQLAlchemy table linking sales to contacts"""
+    __tablename__ = "sale_contacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sale_id = Column(Integer, ForeignKey("sales.id", ondelete="CASCADE"), nullable=False)
+    contact_id = Column(Integer, ForeignKey("contact_list.id", ondelete="CASCADE"), nullable=False)
+
+    sale = relationship("SaleDB", back_populates="sale_contacts")
+    contact = relationship("ContactList", back_populates="sale_contacts")
+

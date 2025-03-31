@@ -38,16 +38,18 @@ async def log_call(
         raise HTTPException(status_code=400, detail="Call duration must be at least 1 minute.")
 
     # ✅ Validate call status (restrict to valid options)
-    allowed_statuses = {"pending", "completed", "failed"}
+    allowed_statuses = {"pending", "completed", "failed", "not interested"}  # ✅ Bætt við 'not interested'
     if call.status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid call status. Allowed: {allowed_statuses}")
 
+    # ✅ Create CallDB instance with disposition
     new_call = CallDB(
         user_id=current_user.id,
         contact_id=call.contact_id,
         duration=call.duration,
         status=call.status,
-        notes=call.notes
+        notes=call.notes,
+        disposition=call.disposition  # ✅ Nýr reitur hér
     )
 
     try:
@@ -56,7 +58,6 @@ async def log_call(
         await db.refresh(new_call)
 
         logger.info(f"✅ New call (ID: {new_call.id}) logged by user {current_user.username} for contact {contact.id}")
-
         return new_call
 
     except IntegrityError as e:
@@ -68,6 +69,7 @@ async def log_call(
         await db.rollback()
         logger.error(f"❌ Unexpected Error in log_call: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred while logging call.")
+
 
 # ==========================
 # ✅ Get All Calls (Admin & Users)

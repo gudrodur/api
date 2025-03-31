@@ -4,15 +4,15 @@ from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload
 from typing import List, Optional
 
-from sale_crm.models import ContactList
-from sale_crm.schemas import ContactCreate, ContactResponse
+from sale_crm.models import ContactList, ContactStatus, CallDB, UserDB
+from sale_crm.schemas import ContactCreate, ContactResponse, CallResponse
 from sale_crm.db import get_db
+from sale_crm.auth import get_current_user
 
 router = APIRouter(prefix="/contacts", tags=["Contacts"])
-
-# ✅ Configure Logging
 logger = logging.getLogger(__name__)
 
 
@@ -21,14 +21,21 @@ logger = logging.getLogger(__name__)
 # ==========================
 @router.get("/", response_model=List[ContactResponse])
 async def get_contacts(db: AsyncSession = Depends(get_db)):
-    """Retrieve all contacts"""
-    result = await db.execute(select(ContactList))
+    """Retrieve all contacts with status name"""
+    result = await db.execute(select(ContactList).options(joinedload(ContactList.status)))
     contacts = result.scalars().all()
 
     if not contacts:
         raise HTTPException(status_code=404, detail="No contacts found")
 
-    return contacts
+    # Manually map status name into response
+    response = []
+    for contact in contacts:
+        contact_data = ContactResponse.model_validate(contact)
+        contact_data.status_name = contact.status.name if contact.status else None
+        response.append(contact_data)
+
+    return response
 
 
 # ==========================
@@ -37,24 +44,30 @@ async def get_contacts(db: AsyncSession = Depends(get_db)):
 @router.post("/", response_model=ContactResponse, status_code=201)
 async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_db)):
     """Create a new contact"""
-    # Check for existing phone or email before creating
-    existing_contact = await db.execute(select(ContactList).filter(
-        (ContactList.phone == contact.phone) | 
-        (ContactList.email == contact.email)
-    ))
+    normalized_phone = contact.phone.strip()
+    normalized_email = contact.email.strip().lower() if contact.email else None
+
+    existing_contact = await db.execute(
+        select(ContactList).filter(
+            (ContactList.phone == normalized_phone) |
+            (ContactList.email == normalized_email)
+        )
+    )
+
     if existing_contact.scalars().first():
         raise HTTPException(status_code=400, detail="Phone or email already exists.")
 
     new_contact = ContactList(
         name=contact.name,
-        phone=contact.phone,
+        phone=normalized_phone,
         phone2=contact.phone2,
-        email=contact.email,
+        email=normalized_email,
         address=contact.address,
         postal_code=contact.postal_code,
         region_name=contact.region_name,
         ssn=contact.ssn,
-        created_at=datetime.now(timezone.utc),  # ✅ Use UTC timezone
+        status_id=contact.status_id,
+        created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
 
@@ -62,23 +75,18 @@ async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_
         db.add(new_contact)
         await db.commit()
         await db.refresh(new_contact)
-        return new_contact
-
+        return ContactResponse.model_validate(new_contact)
     except IntegrityError as e:
         await db.rollback()
         error_message = str(e.orig)
         logger.error(f"❌ Database IntegrityError: {error_message}")
 
-        if "phone_format" in error_message:
-            raise HTTPException(status_code=400, detail="Invalid phone number format (must be 7-20 digits, optional + at start).")
-        elif "phone2_format" in error_message:
-            raise HTTPException(status_code=400, detail="Invalid secondary phone number format (must be 7-20 digits, optional + at start).")
-        elif "contact_list_phone_key" in error_message:
+        if "contact_list_phone_key" in error_message:
             raise HTTPException(status_code=400, detail="Phone number already exists.")
-        elif "contact_list_ssn_key" in error_message:
-            raise HTTPException(status_code=400, detail="SSN already registered.")
         elif "contact_list_email_key" in error_message:
             raise HTTPException(status_code=400, detail="Email already registered.")
+        elif "contact_list_ssn_key" in error_message:
+            raise HTTPException(status_code=400, detail="SSN already registered.")
         else:
             raise HTTPException(status_code=400, detail="An error occurred while creating the contact.")
 
@@ -93,7 +101,6 @@ async def update_contact(contact_id: int, contact: ContactCreate, db: AsyncSessi
     if not contact_db:
         raise HTTPException(status_code=404, detail="Contact not found")
 
-    # Update fields only if provided
     contact_db.name = contact.name or contact_db.name
     contact_db.phone = contact.phone or contact_db.phone
     contact_db.phone2 = contact.phone2 or contact_db.phone2
@@ -102,17 +109,16 @@ async def update_contact(contact_id: int, contact: ContactCreate, db: AsyncSessi
     contact_db.postal_code = contact.postal_code or contact_db.postal_code
     contact_db.region_name = contact.region_name or contact_db.region_name
     contact_db.ssn = contact.ssn or contact_db.ssn
-    contact_db.updated_at = datetime.now(timezone.utc)  # ✅ Update timestamp
+    contact_db.status_id = contact.status_id or contact_db.status_id
+    contact_db.updated_at = datetime.now(timezone.utc)
 
     try:
         await db.commit()
         await db.refresh(contact_db)
-        return contact_db
-
+        return ContactResponse.model_validate(contact_db)
     except IntegrityError as e:
         await db.rollback()
-        error_message = str(e.orig)
-        logger.error(f"❌ Update Error: {error_message}")
+        logger.error(f"❌ Update Error: {e}")
         raise HTTPException(status_code=400, detail="An error occurred while updating the contact.")
 
 
@@ -134,3 +140,44 @@ async def delete_contact(contact_id: int, db: AsyncSession = Depends(get_db)):
         await db.rollback()
         logger.error(f"❌ Delete Error: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while deleting the contact.")
+
+
+# ==========================
+# ✅ Get single contact by ID
+# ==========================
+@router.get("/{contact_id}", response_model=ContactResponse)
+async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db)):
+    """Retrieve a single contact by its ID"""
+    result = await db.execute(
+        select(ContactList).where(ContactList.id == contact_id).options(joinedload(ContactList.status))
+    )
+    contact = result.scalars().first()
+
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    contact_data = ContactResponse.model_validate(contact)
+    contact_data.status_name = contact.status.name if contact.status else None
+    return contact_data
+
+
+# ==========================
+# ✅ Get All Calls for a Contact ID
+# ==========================
+@router.get("/contact/{contact_id}", response_model=List[CallResponse])
+async def get_calls_by_contact_id(
+    contact_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """Retrieve all call logs for a contact"""
+    stmt = select(CallDB).where(CallDB.contact_id == contact_id)
+
+    if current_user.role != "admin":
+        stmt = stmt.where(CallDB.user_id == current_user.id)
+
+    result = await db.execute(stmt)
+    calls = result.scalars().all()
+
+    logger.info(f"📞 {len(calls)} call(s) fetched for contact ID {contact_id} by user {current_user.username}")
+    return calls
