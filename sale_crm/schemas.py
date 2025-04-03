@@ -73,6 +73,8 @@ class ContactCreate(BaseModel):
     region_name: Optional[str] = None
     ssn: Optional[str] = Field(None, pattern=r"^\d{6}-?\d{4}$")
     status_id: Optional[int] = None
+    deal_value: Optional[float] = None  # 💰
+
 
 
 class ContactResponse(ContactCreate):

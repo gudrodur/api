@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from typing import List
 
-from sale_crm.models import CallDB, UserDB, ContactList
+from sale_crm.models import CallDB, UserDB, ContactList, ContactStatus
 from sale_crm.schemas import CallCreate, CallResponse
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
@@ -17,47 +17,77 @@ router = APIRouter(prefix="/calls", tags=["Calls"])
 # ✅ Initialize logger
 logger = logging.getLogger(__name__)
 
+# ✅ Disposition → Contact Status Mapping
+DISPOSITION_TO_CONTACT_STATUS = {
+    "SALE": "Closed",
+    "CALLBACK": "In Progress",
+    "FOLLOW UP REQUIRED": "In Progress",
+    "INTERESTED": "In Progress",
+    "APPOINTMENT SET": "In Progress",
+    "NOT INTERESTED": "Closed",
+    "ANSWERING MACHINE": "Unreachable",
+    "BUSY": "Unreachable",
+    "UNREACHABLE": "Unreachable",
+    "WRONG NUMBER": "Unreachable",
+    "DNC": "Do Not Contact",
+}
+
 # ==========================
 # ✅ Create a New Call Log
 # ==========================
 @router.post("/", response_model=CallResponse, status_code=201)
 async def log_call(
-    call: CallCreate, 
-    db: AsyncSession = Depends(get_db), 
+    call: CallCreate,
+    db: AsyncSession = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
 ):
-    """Log a new call with validation."""
+    """Log a new call and automatically update contact status based on disposition."""
 
-    # ✅ Validate contact existence
+    # 🔍 Ensure the contact exists
     contact = await db.get(ContactList, call.contact_id)
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found.")
 
-    # ✅ Validate call duration (should be at least 1 minute)
+    # ⏱️ Ensure call has a valid duration
     if call.duration < 1:
         raise HTTPException(status_code=400, detail="Call duration must be at least 1 minute.")
 
-    # ✅ Validate call status (restrict to valid options)
-    allowed_statuses = {"pending", "completed", "failed", "not interested"}  # ✅ Bætt við 'not interested'
+    # 📋 Validate allowed call statuses from frontend UI
+    allowed_statuses = {"pending", "completed", "failed", "not interested"}
     if call.status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid call status. Allowed: {allowed_statuses}")
 
-    # ✅ Create CallDB instance with disposition
+    # ☎️ Create and store the call record
     new_call = CallDB(
         user_id=current_user.id,
         contact_id=call.contact_id,
         duration=call.duration,
         status=call.status,
         notes=call.notes,
-        disposition=call.disposition  # ✅ Nýr reitur hér
+        disposition=call.disposition
     )
 
     try:
         db.add(new_call)
+        await db.flush()  # Ensure new_call.id is available
+
+        # 🔁 Automatically update contact status if disposition is recognized
+        disposition = call.disposition
+        new_status_name = DISPOSITION_TO_CONTACT_STATUS.get(disposition)
+
+        if new_status_name:
+            result = await db.execute(select(ContactStatus).where(ContactStatus.name == new_status_name))
+            status = result.scalars().first()
+
+            if status and contact.status_id != status.id:
+                contact.status_id = status.id
+                contact.updated_at = datetime.utcnow()
+                logger.info(f"🔄 Updated contact ID {contact.id} to status '{new_status_name}' based on disposition '{disposition}'")
+
         await db.commit()
         await db.refresh(new_call)
 
-        logger.info(f"✅ New call (ID: {new_call.id}) logged by user {current_user.username} for contact {contact.id}")
+        logger.info(f"✅ Call (ID: {new_call.id}) logged by user {current_user.username} for contact {contact.id}")
         return new_call
 
     except IntegrityError as e:
@@ -67,9 +97,8 @@ async def log_call(
 
     except Exception as e:
         await db.rollback()
-        logger.error(f"❌ Unexpected Error in log_call: {e}")
+        logger.error(f"❌ Unexpected error in log_call: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred while logging call.")
-
 
 # ==========================
 # ✅ Get All Calls (Admin & Users)
@@ -81,10 +110,8 @@ async def get_all_calls(
 ):
     """Retrieve call logs. Admins see all calls, users see only their own."""
     if current_user.role == "admin":
-        # ✅ Admins can see all calls
         result = await db.execute(select(CallDB).options(joinedload(CallDB.user)))
     else:
-        # ✅ Regular users can only see their own calls
         result = await db.execute(select(CallDB).where(CallDB.user_id == current_user.id))
 
     calls = result.scalars().all()
@@ -93,7 +120,6 @@ async def get_all_calls(
         raise HTTPException(status_code=404, detail="No calls found.")
 
     logger.info(f"🔍 User {current_user.username} retrieved call logs. ({len(calls)} records)")
-
     return calls
 
 # ==========================
@@ -106,14 +132,12 @@ async def get_call_by_id(
     current_user: UserDB = Depends(get_current_user)
 ):
     """Retrieve a call log by its ID (Users can only view their own calls, admins can view all)."""
-
     call = await db.get(CallDB, call_id)
 
     if not call:
         logger.error(f"❌ Call retrieval failed: Call ID {call_id} not found.")
         raise HTTPException(status_code=404, detail="Call not found.")
 
-    # ✅ Ensure users can only view their own calls unless they are admin
     if current_user.role != "admin" and call.user_id != current_user.id:
         logger.warning(f"⚠️ Unauthorized access attempt on Call ID {call_id} by {current_user.username}.")
         raise HTTPException(status_code=403, detail="You do not have permission to view this call.")
@@ -131,14 +155,12 @@ async def delete_call(
     current_user: UserDB = Depends(get_current_user)
 ):
     """Delete a call log (Users can delete their own calls, admins can delete any call)."""
-
     call = await db.get(CallDB, call_id)
 
     if not call:
         logger.error(f"❌ Call deletion failed: Call ID {call_id} not found.")
         raise HTTPException(status_code=404, detail="Call not found.")
 
-    # ✅ Ensure users can only delete their own calls unless they are admin
     if current_user.role != "admin" and call.user_id != current_user.id:
         logger.warning(f"⚠️ Unauthorized delete attempt on Call ID {call_id} by {current_user.username}.")
         raise HTTPException(status_code=403, detail="You do not have permission to delete this call.")
@@ -148,7 +170,6 @@ async def delete_call(
         await db.commit()
 
         logger.info(f"✅ Call ID {call_id} deleted by user {current_user.username}.")
-
         return {"message": "Call deleted successfully"}
 
     except Exception as e:

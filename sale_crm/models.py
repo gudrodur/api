@@ -53,6 +53,7 @@ class ContactList(Base):
     postal_code = Column(Integer, nullable=True)
     region_name = Column(String(50), nullable=True)
     ssn = Column(String(12), unique=True, nullable=True)  # ✅ Added length constraint
+    deal_value = Column(Float, nullable=True)  # 💰
     status_id = Column(Integer, ForeignKey("contact_status.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

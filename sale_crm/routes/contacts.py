@@ -21,14 +21,13 @@ logger = logging.getLogger(__name__)
 # ==========================
 @router.get("/", response_model=List[ContactResponse])
 async def get_contacts(db: AsyncSession = Depends(get_db)):
-    """Retrieve all contacts with status name"""
+    """Retrieve all contacts with their status name."""
     result = await db.execute(select(ContactList).options(joinedload(ContactList.status)))
     contacts = result.scalars().all()
 
     if not contacts:
         raise HTTPException(status_code=404, detail="No contacts found")
 
-    # Manually map status name into response
     response = []
     for contact in contacts:
         contact_data = ContactResponse.model_validate(contact)
@@ -43,7 +42,7 @@ async def get_contacts(db: AsyncSession = Depends(get_db)):
 # ==========================
 @router.post("/", response_model=ContactResponse, status_code=201)
 async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_db)):
-    """Create a new contact"""
+    """Create a new contact."""
     normalized_phone = contact.phone.strip()
     normalized_email = contact.email.strip().lower() if contact.email else None
 
@@ -69,6 +68,7 @@ async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_
         status_id=contact.status_id,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
+        deal_value=contact.deal_value,
     )
 
     try:
@@ -76,6 +76,7 @@ async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_
         await db.commit()
         await db.refresh(new_contact)
         return ContactResponse.model_validate(new_contact)
+
     except IntegrityError as e:
         await db.rollback()
         error_message = str(e.orig)
@@ -96,7 +97,7 @@ async def create_contact(contact: ContactCreate, db: AsyncSession = Depends(get_
 # ==========================
 @router.put("/{contact_id}", response_model=ContactResponse)
 async def update_contact(contact_id: int, contact: ContactCreate, db: AsyncSession = Depends(get_db)):
-    """Update an existing contact"""
+    """Update an existing contact."""
     contact_db = await db.get(ContactList, contact_id)
     if not contact_db:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -110,12 +111,14 @@ async def update_contact(contact_id: int, contact: ContactCreate, db: AsyncSessi
     contact_db.region_name = contact.region_name or contact_db.region_name
     contact_db.ssn = contact.ssn or contact_db.ssn
     contact_db.status_id = contact.status_id or contact_db.status_id
+    contact_db.deal_value = contact.deal_value if contact.deal_value is not None else contact_db.deal_value
     contact_db.updated_at = datetime.now(timezone.utc)
 
     try:
         await db.commit()
         await db.refresh(contact_db)
         return ContactResponse.model_validate(contact_db)
+
     except IntegrityError as e:
         await db.rollback()
         logger.error(f"❌ Update Error: {e}")
@@ -127,7 +130,7 @@ async def update_contact(contact_id: int, contact: ContactCreate, db: AsyncSessi
 # ==========================
 @router.delete("/{contact_id}", status_code=204)
 async def delete_contact(contact_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete a contact by ID"""
+    """Delete a contact by ID."""
     contact_db = await db.get(ContactList, contact_id)
     if not contact_db:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -136,6 +139,7 @@ async def delete_contact(contact_id: int, db: AsyncSession = Depends(get_db)):
         await db.delete(contact_db)
         await db.commit()
         return {"message": "Contact deleted successfully"}
+
     except Exception as e:
         await db.rollback()
         logger.error(f"❌ Delete Error: {e}")
@@ -143,11 +147,11 @@ async def delete_contact(contact_id: int, db: AsyncSession = Depends(get_db)):
 
 
 # ==========================
-# ✅ Get single contact by ID
+# ✅ Get a single contact by ID
 # ==========================
 @router.get("/{contact_id}", response_model=ContactResponse)
 async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db)):
-    """Retrieve a single contact by its ID"""
+    """Retrieve a single contact by its ID."""
     result = await db.execute(
         select(ContactList).where(ContactList.id == contact_id).options(joinedload(ContactList.status))
     )
@@ -162,15 +166,24 @@ async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db))
 
 
 # ==========================
-# ✅ Get All Calls for a Contact ID
+# ✅ API alias for Android: GET /contacts/contact/{id}
 # ==========================
-@router.get("/contact/{contact_id}", response_model=List[CallResponse])
+@router.get("/contact/{contact_id}", response_model=ContactResponse)
+async def get_contact_by_id_alias(contact_id: int, db: AsyncSession = Depends(get_db)):
+    """Alias to retrieve contact by ID (for Android)."""
+    return await get_contact_by_id(contact_id, db)
+
+
+# ==========================
+# ✅ Get all calls for a contact
+# ==========================
+@router.get("/contact/{contact_id}/calls", response_model=List[CallResponse])
 async def get_calls_by_contact_id(
     contact_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
 ):
-    """Retrieve all call logs for a contact"""
+    """Retrieve all call logs for a contact."""
     stmt = select(CallDB).where(CallDB.contact_id == contact_id)
 
     if current_user.role != "admin":
@@ -181,3 +194,67 @@ async def get_calls_by_contact_id(
 
     logger.info(f"📞 {len(calls)} call(s) fetched for contact ID {contact_id} by user {current_user.username}")
     return calls
+
+
+# ==========================
+# ✅ Set status to "In Progress" from "New"
+# ==========================
+@router.patch("/{contact_id}/set-in-progress", status_code=204)
+async def set_contact_in_progress(
+    contact_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    result = await db.execute(select(ContactList).where(ContactList.id == contact_id))
+    contact = result.scalars().first()
+
+    if not contact:
+        logger.error(f"❌ Contact {contact_id} not found for PATCH /set-in-progress")
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    result = await db.execute(select(ContactStatus).where(ContactStatus.id == contact.status_id))
+    current_status = result.scalars().first()
+
+    if current_status and current_status.name not in {"Closed", "Do Not Contact", "In Progress"}:
+        result = await db.execute(select(ContactStatus).where(ContactStatus.name == "In Progress"))
+        in_progress = result.scalars().first()
+
+        if in_progress:
+            contact.status_id = in_progress.id
+            contact.updated_at = datetime.utcnow()
+            await db.commit()
+            logger.info(f"🟡 Contact {contact.id} auto-updated to 'In Progress' by {current_user.username}")
+
+    return
+
+
+# ==========================
+# ✅ Revert status to "New" from "In Progress"
+# ==========================
+@router.patch("/{contact_id}/set-to-new", status_code=204)
+async def revert_to_new(
+    contact_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user),
+):
+    result = await db.execute(select(ContactList).where(ContactList.id == contact_id))
+    contact = result.scalars().first()
+
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    result = await db.execute(select(ContactStatus).where(ContactStatus.id == contact.status_id))
+    current_status = result.scalars().first()
+
+    if current_status and current_status.name == "In Progress":
+        result = await db.execute(select(ContactStatus).where(ContactStatus.name == "New"))
+        new_status = result.scalars().first()
+
+        if new_status:
+            contact.status_id = new_status.id
+            contact.updated_at = datetime.utcnow()
+            await db.commit()
+            logger.info(f"🔁 Contact {contact.id} status reverted to 'New' by {current_user.username}")
+        return
+
+    raise HTTPException(status_code=409, detail="Contact status is not 'In Progress'; cannot revert to 'New'")
