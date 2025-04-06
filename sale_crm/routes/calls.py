@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 # ✅ Disposition → Contact Status Mapping
 DISPOSITION_TO_CONTACT_STATUS = {
     "SALE": "Closed",
-    "CALLBACK": "In Progress",
-    "FOLLOW UP REQUIRED": "In Progress",
-    "INTERESTED": "In Progress",
-    "APPOINTMENT SET": "In Progress",
+    "CALLBACK": "Follow Up",
+    "FOLLOW UP REQUIRED": "Follow Up",
+    "INTERESTED": "Follow Up",
+    "APPOINTMENT SET": "Follow Up",
     "NOT INTERESTED": "Closed",
     "ANSWERING MACHINE": "Unreachable",
     "BUSY": "Unreachable",

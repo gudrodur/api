@@ -28,13 +28,26 @@ class CallDB(Base):
 # ==========================
 # Contact Status Table
 # ==========================
+import enum
+from sqlalchemy import Enum as SqlEnum
+
+class ContactStatusEnum(str, enum.Enum):
+    new = "New"
+    exclusive_lock = "Exclusive Lock"
+    follow_up = "Follow Up"
+    closed = "Closed"
+    unreachable = "Unreachable"
+    do_not_contact = "Do Not Contact"
+
 class ContactStatus(Base):
     __tablename__ = "contact_status"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(50), nullable=False, unique=True)
+    name = Column(SqlEnum(ContactStatusEnum, name="contactstatus_enum", create_constraint=True), unique=True, nullable=False)
 
     contacts = relationship("ContactList", back_populates="status", cascade="all, delete-orphan")
+
+
 
 
 # ==========================
@@ -46,22 +59,25 @@ class ContactList(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=True)
-    phone = Column(String(20), nullable=False, unique=True)  # ✅ Added length constraint
-    phone2 = Column(String(20), nullable=True)  # ✅ Added length constraint
+    phone = Column(String(20), nullable=False, unique=True)
+    phone2 = Column(String(20), nullable=True)
     email = Column(String, nullable=True)
     address = Column(String, nullable=True)
     postal_code = Column(Integer, nullable=True)
     region_name = Column(String(50), nullable=True)
-    ssn = Column(String(12), unique=True, nullable=True)  # ✅ Added length constraint
-    deal_value = Column(Float, nullable=True)  # 💰
+    ssn = Column(String(12), unique=True, nullable=True)
+    deal_value = Column(Float, nullable=True)
     status_id = Column(Integer, ForeignKey("contact_status.id", ondelete="SET NULL"), nullable=True)
+    locked_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     status = relationship("ContactStatus", back_populates="contacts")
+    locked_by_user = relationship("UserDB", back_populates="locked_contacts", foreign_keys=[locked_by_user_id])  # 🔐 NEW
     sales = relationship("SaleDB", back_populates="contact", cascade="all, delete-orphan")
     calls = relationship("CallDB", back_populates="contact", cascade="all, delete-orphan")
     sale_contacts = relationship("SaleContact", back_populates="contact", cascade="all, delete-orphan")
+
 
 
 # ==========================
@@ -76,8 +92,8 @@ class UserDB(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
-    phone = Column(String(20), nullable=True)  # ✅ Added length constraint
-    phone2 = Column(String(20), nullable=True)  # ✅ Added length constraint
+    phone = Column(String(20), nullable=True)
+    phone2 = Column(String(20), nullable=True)
     last_login = Column(DateTime(timezone=True), nullable=True)
     role = Column(String, default="salesperson", nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -85,6 +101,8 @@ class UserDB(Base):
 
     sales = relationship("SaleDB", back_populates="user", cascade="all, delete-orphan")
     calls = relationship("CallDB", back_populates="user", cascade="all, delete-orphan")
+    locked_contacts = relationship("ContactList", back_populates="locked_by_user", foreign_keys="[ContactList.locked_by_user_id]")  # 🔐 NEW
+
 
 
 # ==========================

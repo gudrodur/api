@@ -77,3 +77,9 @@ async def init_db():
         except Exception as e:
             logger.critical(f"❌ Database migration error: {e}")
             raise
+
+# ==========================
+# Optional: Exportable Async Session Maker for Tests
+# ==========================
+async_session_maker = SessionLocal
+
