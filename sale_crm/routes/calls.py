@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
@@ -116,20 +117,41 @@ async def get_all_calls(
 @router.get("/contacts/{contact_id}/calls", response_model=List[CallOut])
 async def get_calls_by_contact_with_filter(
     contact_id: int,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: Optional[datetime] = Query(
+        None,
+        alias="from",
+        description="Filter calls created after this date (inclusive). Format: YYYY-MM-DD or ISO 8601"
+    ),
+    to_date: Optional[datetime] = Query(
+        None,
+        alias="to",
+        description="Filter calls created before this date (inclusive). Format: YYYY-MM-DD or ISO 8601"
+    ),
+    sort_by: str = Query(
+        "created_at",
+        description="Field to sort by. Currently supports only 'created_at'"
+    ),
+    order: str = Query(
+        "desc",
+        regex="^(asc|desc)$",
+        description="Sort direction: 'asc' for oldest first, 'desc' for newest first"
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Retrieve call history for a specific contact.
-    Supports optional date filtering via `from` and `to` query parameters.
+    Supports optional date filtering and sorting by creation date.
     """
     query = select(Call).where(Call.contact_id == contact_id)
+
     if from_date:
         query = query.where(Call.created_at >= from_date)
     if to_date:
         query = query.where(Call.created_at <= to_date)
+
+    if sort_by == "created_at":
+        query = query.order_by(desc(Call.created_at) if order == "desc" else asc(Call.created_at))
 
     result = await db.execute(query)
     return result.scalars().all()

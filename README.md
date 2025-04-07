@@ -99,3 +99,20 @@ api/
 ## 📬 Hafðu samband
 
 > Verkefni eftir `@gudrodur` – velkomið að senda PR, athugasemdir eða skila hugmyndum!
+
+
+### 🔄 Sorting Support on Call History
+
+The following route now supports **optional sorting**:
+
+```
+GET /contacts/{id}/calls?from=...&to=...&sort_by=created_at&order=asc|desc
+```
+
+- `sort_by=created_at` (default) – Sort by creation time
+- `order=desc` (default) – Newest first. Use `asc` for oldest first
+
+**Example:**
+```http
+/calls/contacts/14/calls?from=2025-04-01&to=2025-04-07&order=asc
+```
