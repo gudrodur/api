@@ -5,7 +5,7 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# 🔄 Environment
+# 🔄 Load environment variables
 load_dotenv()
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 🔗 Include all routers
     app.include_router(auth_router, prefix="/auth", tags=["Auth"])
     app.include_router(users_router, prefix="/users", tags=["Users"])
     app.include_router(contact_status_router, prefix="/contact_status", tags=["Contact Status"])
