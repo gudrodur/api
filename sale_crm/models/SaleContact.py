@@ -16,5 +16,5 @@ class SaleContact(Base):
 
     # 🔗 Relationships
     sale = relationship("Sale")
-    contact = relationship("ContactList")
-    created_by_user = relationship("UserDB", back_populates="sale_contacts_created")
+    contact = relationship("Contact")
+    created_by_user = relationship("User", back_populates="sale_contacts_created")

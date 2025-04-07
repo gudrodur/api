@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 
 from sale_crm.db import SessionLocal
 from sale_crm.models import (
-    UserDB, ContactList, Sale, SaleStatus, SalesOutcome, CallDB, SaleContact
+    User, Contact, Sale, SaleStatus, SalesOutcome, Call, SaleContact
 )
 from sale_crm.auth import hash_password
 
@@ -60,14 +60,14 @@ async def insert_data():
 
         async with SessionLocal() as session:
             # Insert Users
-            result = await session.execute(select(UserDB.username))
+            result = await session.execute(select(User.username))
             existing_users = set(result.scalars().all())
             users = []
             for _, row in df.iterrows():
                 full_name = row["FULL_NAME"].strip()
                 username = full_name.replace(" ", "").lower()
                 if username not in existing_users:
-                    users.append(UserDB(
+                    users.append(User(
                         username=username,
                         email=f"{username}@example.com",
                         full_name=full_name,
@@ -84,13 +84,13 @@ async def insert_data():
 
         async with SessionLocal() as session:
             # Insert Contacts
-            result = await session.execute(select(ContactList.name))
+            result = await session.execute(select(Contact.name))
             existing_contacts = set(result.scalars().all())
             contacts = []
             for _, row in df.iterrows():
                 full_name = row["FULL_NAME"].strip()
                 if full_name not in existing_contacts:
-                    contacts.append(ContactList(
+                    contacts.append(Contact(
                         name=full_name,
                         phone=fake.phone_number(),
                         phone2=fake.phone_number(),

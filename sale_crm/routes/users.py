@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 import logging
 from typing import List, Optional
 
-from sale_crm.models import UserDB
+from sale_crm.models import User
 from sale_crm.schemas import UserCreate, UserResponse
 from sale_crm.auth import get_current_user_id, get_current_user, hash_password
 from sale_crm.db import get_db
@@ -19,18 +19,18 @@ logger = logging.getLogger(__name__)
 async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     try:
         existing_user = await db.execute(
-            select(UserDB).where(
-                (UserDB.username == user.username) |
-                (UserDB.email == user.email) |
-                (UserDB.phone == user.phone) |
-                (UserDB.phone2 == user.phone2)
+            select(User).where(
+                (User.username == user.username) |
+                (User.email == user.email) |
+                (User.phone == user.phone) |
+                (User.phone2 == user.phone2)
             )
         )
         if existing_user.scalars().first():
             raise HTTPException(status_code=409, detail="Username, email, or phone number already exists!")
 
         hashed_password = hash_password(user.password)
-        db_user = UserDB(
+        db_user = User(
             username=user.username,
             email=user.email,
             full_name=user.full_name,
@@ -54,34 +54,34 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 @router.get("/", response_model=List[UserResponse])
-async def get_all_users(db: AsyncSession = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+async def get_all_users(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="You do not have permission to view all users.")
-    result = await db.execute(select(UserDB).options(joinedload(UserDB.sales)))
+    result = await db.execute(select(User).options(joinedload(User.sales)))
     return result.scalars().all()
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id), current_user: UserDB = Depends(get_current_user)):
+async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id), current_user: User = Depends(get_current_user)):
     if current_user.role != "admin" and current_user_id != user_id:
         raise HTTPException(status_code=403, detail="You do not have permission to view this user.")
-    result = await db.execute(select(UserDB).where(UserDB.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
 @router.put("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int, updated_user: UserCreate, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id), current_user: UserDB = Depends(get_current_user)):
-    result = await db.execute(select(UserDB).where(UserDB.id == user_id))
+async def update_user(user_id: int, updated_user: UserCreate, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if current_user.role != "admin" and current_user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not have permission to update this user.")
     existing_user = await db.execute(
-        select(UserDB)
-        .where((UserDB.username == updated_user.username) | (UserDB.email == updated_user.email))
-        .where(UserDB.id != user_id)
+        select(User)
+        .where((User.username == updated_user.username) | (User.email == updated_user.email))
+        .where(User.id != user_id)
     )
     if existing_user.scalars().first():
         raise HTTPException(status_code=409, detail="Username or email is already in use by another user.")
@@ -105,8 +105,8 @@ async def update_user(user_id: int, updated_user: UserCreate, db: AsyncSession =
         raise HTTPException(status_code=400, detail="Failed to update user due to database constraints.")
 
 @router.delete("/{user_id}", status_code=204)
-async def delete_user(user_id: int, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id), current_user: UserDB = Depends(get_current_user)):
-    result = await db.execute(select(UserDB).where(UserDB.id == user_id))
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

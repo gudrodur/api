@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from sale_crm.db import get_db
-from sale_crm.models import UserDB
+from sale_crm.models import User
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
@@ -50,7 +50,7 @@ def create_refresh_token(user_id: int) -> str:
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(UserDB).where(UserDB.username == form_data.username))
+    result = await db.execute(select(User).where(User.username == form_data.username))
     user = result.scalars().first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -74,7 +74,7 @@ async def refresh_access_token(refresh_token: str, db: AsyncSession = Depends(ge
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload.get("sub"))
 
-        result = await db.execute(select(UserDB).where(UserDB.id == user_id))
+        result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalars().first()
 
         if not user:
@@ -91,7 +91,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload.get("sub"))
-        result = await db.execute(select(UserDB).where(UserDB.id == user_id))
+        result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalars().first()
 
         if not user:

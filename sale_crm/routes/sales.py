@@ -4,10 +4,9 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
 import logging
-from datetime import datetime
-from typing import List, Optional
+from typing import List
 
-from sale_crm.models import SaleDB, UserDB, ContactList, SaleStatus, SalesOutcomes
+from sale_crm.models import Sale, User, Contact, SaleStatus, SalesOutcome
 from sale_crm.schemas import SaleCreate, SaleResponse
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
@@ -24,17 +23,17 @@ logger = logging.getLogger(__name__)
 async def create_sale(
     sale: SaleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Creates a new sale after validating user, contact, and status."""
     try:
         # ✅ Validate user existence
-        user = await db.get(UserDB, sale.user_id)
+        user = await db.get(User, sale.user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found.")
 
         # ✅ Validate contact existence
-        contact = await db.get(ContactList, sale.contact_id)
+        contact = await db.get(Contact, sale.contact_id)
         if not contact:
             raise HTTPException(status_code=404, detail="Contact not found.")
 
@@ -51,8 +50,8 @@ async def create_sale(
 
         # ✅ Prevent duplicate sales
         existing_sale = await db.execute(
-            select(SaleDB)
-            .where(SaleDB.user_id == sale.user_id, SaleDB.contact_id == sale.contact_id)
+            select(Sale)
+            .where(Sale.user_id == sale.user_id, Sale.contact_id == sale.contact_id)
         )
         if existing_sale.scalars().first():
             raise HTTPException(status_code=409, detail="A sale already exists for this user and contact.")
@@ -61,7 +60,7 @@ async def create_sale(
         if sale.sale_amount < 0:
             raise HTTPException(status_code=400, detail="Sale amount cannot be negative.")
 
-        new_sale = SaleDB(
+        new_sale = Sale(
             user_id=sale.user_id,
             contact_id=sale.contact_id,
             status_id=sale.status_id,
@@ -99,14 +98,14 @@ async def create_sale(
 @router.get("/", response_model=List[SaleResponse])
 async def get_all_sales(
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Retrieve all sales (Admin access required)."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="You do not have permission to view all sales.")
 
     result = await db.execute(
-        select(SaleDB).options(joinedload(SaleDB.user), joinedload(SaleDB.contact))
+        select(Sale).options(joinedload(Sale.user), joinedload(Sale.contact))
     )
     sales = result.scalars().all()
 
@@ -120,10 +119,10 @@ async def get_all_sales(
 async def get_sale_by_id(
     sale_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Retrieve a sale by its ID (Users can only view their own sales, admins can view all)."""
-    sale = await db.get(SaleDB, sale_id)
+    sale = await db.get(Sale, sale_id)
 
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found.")
@@ -141,10 +140,10 @@ async def update_sale(
     sale_id: int,
     updated_sale: SaleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Update sale details (Users can update their own sales, admins can update any sale)."""
-    sale = await db.get(SaleDB, sale_id)
+    sale = await db.get(Sale, sale_id)
 
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found.")
@@ -176,10 +175,10 @@ async def update_sale(
 async def delete_sale(
     sale_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Delete a sale (Users can delete their own sales, admins can delete any sale)."""
-    sale = await db.get(SaleDB, sale_id)
+    sale = await db.get(Sale, sale_id)
 
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found.")

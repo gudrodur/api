@@ -6,7 +6,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from typing import List
 
-from sale_crm.models import ContactList, ContactStatus, UserDB
+from sale_crm.models import Contact, ContactStatus, User
 from sale_crm.schemas import ContactCreate, ContactResponse, StatusUpdateRequest, UserResponse
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 @router.get("/", response_model=List[ContactResponse])
 async def get_contacts(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(ContactList).options(
-            joinedload(ContactList.status),
-            joinedload(ContactList.locked_by_user)
+        select(Contact).options(
+            joinedload(Contact.status),
+            joinedload(Contact.locked_by_user)
         )
     )
     contacts = result.scalars().all()
@@ -44,11 +44,11 @@ async def get_contacts(db: AsyncSession = Depends(get_db)):
 @router.get("/{contact_id}", response_model=ContactResponse)
 async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(ContactList)
-        .where(ContactList.id == contact_id)
+        select(Contact)
+        .where(Contact.id == contact_id)
         .options(
-            joinedload(ContactList.status),
-            joinedload(ContactList.locked_by_user)
+            joinedload(Contact.status),
+            joinedload(Contact.locked_by_user)
         )
     )
     contact = result.scalars().first()
@@ -70,14 +70,14 @@ async def update_contact_status(
     contact_id: int,
     payload: StatusUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     new_status_name = payload.status_name.strip()
 
     if not new_status_name:
         raise HTTPException(status_code=400, detail="Status name must not be empty.")
 
-    contact = await db.get(ContactList, contact_id)
+    contact = await db.get(Contact, contact_id)
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found.")
 
@@ -115,12 +115,12 @@ async def update_contact_status(
 @router.get("/locked", response_model=List[ContactResponse])
 async def get_locked_contacts(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(ContactList)
+        select(Contact)
         .join(ContactStatus)
         .where(ContactStatus.name == "Exclusive Lock")
         .options(
-            joinedload(ContactList.status),
-            joinedload(ContactList.locked_by_user)
+            joinedload(Contact.status),
+            joinedload(Contact.locked_by_user)
         )
     )
     contacts = result.scalars().all()

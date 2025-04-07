@@ -7,7 +7,7 @@ from passlib.context import CryptContext
 
 from sale_crm.main import app
 from sale_crm.db import async_session_maker
-from sale_crm.models import UserDB
+from sale_crm.models import User
 from sale_crm.auth import create_access_token
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -56,12 +56,12 @@ async def test_user_token(db_session: AsyncSession) -> str:
 
 
 async def create_or_get_user(session: AsyncSession, username: str, email: str, full_name: str, password: str, role: str):
-    result = await session.execute(select(UserDB).where(UserDB.username == username))
+    result = await session.execute(select(User).where(User.username == username))
     user = result.scalars().first()
     if user:
         return user
 
-    new_user = UserDB(
+    new_user = User(
         username=username,
         email=email,
         full_name=full_name,

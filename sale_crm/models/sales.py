@@ -17,7 +17,7 @@ class Sale(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     # 🔗 Relationships
-    user = relationship("UserDB", back_populates="sales")
-    contact = relationship("ContactList")
+    user = relationship("User", back_populates="sales")
+    contact = relationship("Contact")
     status = relationship("SaleStatus")
     outcome = relationship("SalesOutcome")

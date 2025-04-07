@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 import logging
 from typing import List
 
-from sale_crm.models import ContactStatus, ContactStatusEnum, UserDB
+from sale_crm.models import ContactStatus, ContactStatusEnum, User
 from sale_crm.schemas import ContactStatusCreate, ContactStatusResponse
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 async def create_contact_status(
     status: ContactStatusCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Create a new contact status (Admins only). Enforces enum compliance."""
     if current_user.role != "admin":
@@ -67,7 +67,7 @@ async def create_contact_status(
 @router.get("/", response_model=List[ContactStatusResponse])
 async def get_all_contact_statuses(
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Retrieve all contact statuses."""
     result = await db.execute(select(ContactStatus))

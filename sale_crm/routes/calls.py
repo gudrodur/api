@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from typing import List
 
-from sale_crm.models import CallDB, UserDB, ContactList, ContactStatus
+from sale_crm.models import Call, User, Contact, ContactStatus
 from sale_crm.schemas import CallCreate, CallResponse
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
@@ -38,12 +38,12 @@ DISPOSITION_TO_CONTACT_STATUS = {
 async def log_call(
     call: CallCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Log a new call and automatically update contact status based on disposition."""
 
     # 🔍 Ensure the contact exists
-    contact = await db.get(ContactList, call.contact_id)
+    contact = await db.get(Contact, call.contact_id)
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found.")
 
@@ -57,7 +57,7 @@ async def log_call(
         raise HTTPException(status_code=400, detail=f"Invalid call status. Allowed: {allowed_statuses}")
 
     # ☎️ Create and store the call record
-    new_call = CallDB(
+    new_call = Call(
         user_id=current_user.id,
         contact_id=call.contact_id,
         duration=call.duration,
@@ -105,13 +105,13 @@ async def log_call(
 @router.get("/", response_model=List[CallResponse])
 async def get_all_calls(
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Retrieve call logs. Admins see all calls, users see only their own."""
     if current_user.role == "admin":
-        result = await db.execute(select(CallDB).options(joinedload(CallDB.user)))
+        result = await db.execute(select(Call).options(joinedload(Call.user)))
     else:
-        result = await db.execute(select(CallDB).where(CallDB.user_id == current_user.id))
+        result = await db.execute(select(Call).where(Call.user_id == current_user.id))
 
     calls = result.scalars().all()
 
@@ -128,10 +128,10 @@ async def get_all_calls(
 async def get_call_by_id(
     call_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Retrieve a call log by its ID (Users can only view their own calls, admins can view all)."""
-    call = await db.get(CallDB, call_id)
+    call = await db.get(Call, call_id)
 
     if not call:
         logger.error(f"❌ Call retrieval failed: Call ID {call_id} not found.")
@@ -151,10 +151,10 @@ async def get_call_by_id(
 async def delete_call(
     call_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Delete a call log (Users can delete their own calls, admins can delete any call)."""
-    call = await db.get(CallDB, call_id)
+    call = await db.get(Call, call_id)
 
     if not call:
         logger.error(f"❌ Call deletion failed: Call ID {call_id} not found.")

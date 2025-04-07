@@ -1,7 +1,6 @@
 from .base import Base
-from .users import UserDB
-from .contacts import ContactList
-from .calls import CallDB
-from .sales import Sale as SaleDB
-from sale_crm.models import SaleDB, UserDB, ContactList, SaleStatus, SalesOutcome
-
+from .users import User
+from .contacts import Contact
+from .calls import Call
+from .sales import Sale
+from .status_models import SaleStatus, SalesOutcome, ContactStatus, ContactStatusEnum

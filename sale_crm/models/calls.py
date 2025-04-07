@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from .base import Base
 
-class CallDB(Base):
+class Call(Base):
     __tablename__ = "calls"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -16,5 +16,5 @@ class CallDB(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     # 🔗 Relationships
-    user = relationship("UserDB", back_populates="calls")
-    contact = relationship("ContactList")
+    user = relationship("User", back_populates="calls")
+    contact = relationship("Contact")

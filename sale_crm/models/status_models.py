@@ -13,7 +13,7 @@ class ContactStatus(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
 
-    contacts = relationship("ContactList", back_populates="status")
+    contacts = relationship("Contact", back_populates="status")
 
 
 class SaleStatus(Base):

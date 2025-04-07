@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from .base import Base  # Sameinaðar Base-týpur
 
-class UserDB(Base):
+class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -20,8 +20,8 @@ class UserDB(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
-    # 🔗 Relationships (Sale, CallDB, ContactList, SaleContact)
-    locked_contacts = relationship("ContactList", back_populates="locked_by_user")
-    calls = relationship("CallDB", back_populates="user")
+    # 🔗 Relationships (Sale, Call, Contact, SaleContact)
+    locked_contacts = relationship("Contact", back_populates="locked_by_user")
+    calls = relationship("Call", back_populates="user")
     sales = relationship("Sale", back_populates="user")
     sale_contacts_created = relationship("SaleContact", back_populates="created_by_user")

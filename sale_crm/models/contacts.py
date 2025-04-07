@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from .base import Base
 
-class ContactList(Base):
+class Contact(Base):
     __tablename__ = "contact_list"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -25,4 +25,4 @@ class ContactList(Base):
 
     # 🔗 Relationships
     status = relationship("ContactStatus", back_populates="contacts")
-    locked_by_user = relationship("UserDB", back_populates="locked_contacts")
+    locked_by_user = relationship("User", back_populates="locked_contacts")
