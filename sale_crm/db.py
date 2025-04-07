@@ -8,7 +8,11 @@ load_dotenv()
 
 
 # Import models (Ensure Base is imported from models.py to avoid conflicts)
-from sale_crm.models import Base, UserDB, SaleDB, ContactList, SaleStatus, SalesOutcomes, CallDB
+from sale_crm.models.sales import Sale
+from sale_crm.models.status_models import SalesOutcome, ContactStatus
+from sale_crm.models.users import UserDB
+from sale_crm.models.contacts import ContactList
+
 
 # ==========================
 # Load Environment Variables
