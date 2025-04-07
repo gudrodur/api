@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List
 
 from sale_crm.models import Call, User, Contact, ContactStatus
-from sale_crm.schemas import CallCreate, CallResponse
+from sale_crm.schemas import CallCreate, CallOut, CallResponse
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
 
@@ -119,6 +119,18 @@ async def get_all_calls(
         raise HTTPException(status_code=404, detail="No calls found.")
 
     logger.info(f"🔍 User {current_user.username} retrieved call logs. ({len(calls)} records)")
+    return calls
+
+@router.get("/calls/contact/{contact_id}", response_model=List[CallOut])
+async def get_calls_for_contact(
+    contact_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(Call).where(Call.contact_id == contact_id))
+    calls = result.scalars().all()
+    if not calls:
+        raise HTTPException(status_code=404, detail="No calls found for this contact")
     return calls
 
 # ==========================

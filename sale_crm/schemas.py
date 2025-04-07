@@ -135,3 +135,19 @@ class CallResponse(BaseModel):
     class Config:
         orm_mode = True
 
+class CallOut(BaseModel):
+    id: int
+    user_id: int
+    contact_id: int
+    duration: int
+    disposition: Optional[str]
+    status: str
+    notes: Optional[str]
+    call_time: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
