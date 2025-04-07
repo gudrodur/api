@@ -1,2 +1,1 @@
-sale_crm/routes/
-sale_crm/test/
+__all__ = ["routes", "models", "auth", "schemas", "db", "app_factory"]

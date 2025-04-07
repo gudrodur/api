@@ -1,73 +1,89 @@
 # 📞 Secure Sales CRM API
 
-Velkomin í **Sales CRM** kerfið! Þetta er öflugt og öruggt FastAPI REST API til að stjórna sölum, notendum, viðskiptavinum, símtölum og stöðustjórnun fyrir símasölu. Allt keyrt á PostgreSQL gagnagrunni með asyncronous SQLAlchemy ORM og JWT auðkenningu.
+**Sales CRM kerfi byggt á FastAPI** með JWT auðkenningu, PostgreSQL gagnagrunnstengingu, og modular uppsetningu fyrir notendur, viðskiptavini, símtöl og sölu.
 
 ---
 
-## 🚀 Yfirlit
+## 🚀 Eiginleikar
 
-- **API Rammi**: FastAPI + async SQLAlchemy
-- **Gagnagrunnur**: PostgreSQL með Alembic fyrir migration
-- **Auðkenning**: OAuth2 + JWT Tokens + Bcrypt fyrir lykilorð
-- **Skráaruppbygging**: Modular með routes fyrir `users`, `contacts`, `sales`, `calls` og stöður
-- **Frontend Testing**: Prófað með Android Studio (Samsung S23 Ultra)
-- **Logging**: Miðlægt logging fyrir debugging og eftirlit
-- **CORS**: Öruggt með stillanlegum leyfilegum uppruna
-
----
-
-## 🔒 Öryggi
-
-- Lykilorð eru hashuð með **bcrypt**
-- JWT tokens með gildistíma fyrir bæði Access og Refresh
-- Einungis admins hafa aðgang að viðkvæmum leiðum eins og `GET /users` eða `GET /sales`
+- 🔐 JWT OAuth2 auðkenning (access og refresh tokens)
+- 🧠 Async SQLAlchemy ORM fyrir PostgreSQL
+- 📞 Viðskiptavinir, símtöl og söluferli með stöðuyfirliti
+- 🧩 Modular router uppbygging (users, contacts, calls, sales)
+- 🧪 Pytest testkerfi og prófunargögn
+- 🌍 CORS, .env stuðningur, og líftíma-stýring
+- 📝 Pydantic skemu fyrir validation og OpenAPI
 
 ---
 
-## 📁 Helstu Routes
+## 🛠️ Uppsetning
 
-### 🧑‍💼 Notendur `/users`
-- POST `/users` – Búa til nýjan notanda
-- GET `/users` – Sækja alla (admin only)
-- PUT/DELETE/GET `/users/{id}` – Sjálfur eða admin
+1. **Afritaðu verkefnið:**
+```bash
+git clone https://github.com/gudrodur/api.git
+cd api
+```
 
-### ☎️ Tengiliðir `/contacts`
-- POST `/contacts` – Búa til tengilið
-- GET `/contacts` – Sækja alla tengiliði
-- PUT/DELETE/GET `/contacts/{id}` – Uppfæra, eyða, sækja
-- GET `/contacts/contact/{id}` – Símtöl eftir tengilið
+2. **Búðu til virtual environment:**
+```bash
+python -m venv venv
+source venv/bin/activate  # eða .\venv\Scripts\activate á Windows
+```
 
-### 💼 Sala `/sales`
-- POST `/sales` – Búa til sölu
-- GET `/sales` – Sækja allar (admin only)
-- PUT/DELETE/GET `/sales/{id}` – Sjálfur eða admin
+3. **Settu upp pakkana:**
+```bash
+pip install -r requirements.txt
+```
 
-### 📞 Símtöl `/calls`
-- POST `/calls` – Skrá símtal
-- GET `/calls` – Sjá eigin símtöl (admin sér öll)
-- DELETE/GET `/calls/{id}` – Eyða/sækja
+4. **Settu upp .env skrá (sjá dæmi neðar)**
 
-### 📊 Stöður
-- `/contact_status` – CRUD á stöðum tengiliða
-- `/sale_status`, `/sales_outcomes` – Notað í tengslum við sölu (ekki fullroutað)
-
----
-
-## 🧬 Skema Samræmi
-
-Samræmist `2025-03-31_phone_sales.pdf` með öllum dálkum, gagnategundum og tengslum við haldið í `models.py`.
+5. **Keyrðu verkefnið:**
+```bash
+uvicorn main:app --reload
+```
 
 ---
 
-## ⚙️ Keyrsla (Dev)
+## 🧪 Prófanir
 
 ```bash
-# .env þarf að innihalda:
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost/db
-SECRET_KEY=your-secret
+pytest
+```
+
+---
+
+## 🔐 .env skrá (dæmi)
+
+```env
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/sales_crm
+SECRET_KEY=supersecretkey
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
+LOG_LEVEL=DEBUG
 ALLOWED_ORIGINS=http://localhost:3000
+```
 
-# Keyra app
-uvicorn sale_crm.main:app --reload
+---
+
+## 🗂️ Verkefnistré
+
+```bash
+api/
+├── sale_crm/
+│   ├── models/               # SQLAlchemy ORM módel
+│   ├── routes/               # API endpointar
+│   ├── auth.py               # JWT & login
+│   ├── db.py                 # DB tengingar
+│   ├── schemas.py            # Pydantic skemu
+│   ├── app_factory.py        # Býr til app
+│   └── main.py               # Ræsir appið
+├── populate_database.py      # Test gögn
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 📬 Hafðu samband
+
+> Unnið af `gudrodur` – velkomið að senda PR, athugasemdir eða skila hugmyndum!
