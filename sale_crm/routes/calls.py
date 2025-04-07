@@ -128,10 +128,8 @@ async def get_calls_for_contact(
     current_user: User = Depends(get_current_user)
 ):
     result = await db.execute(select(Call).where(Call.contact_id == contact_id))
-    calls = result.scalars().all()
-    if not calls:
-        raise HTTPException(status_code=404, detail="No calls found for this contact")
-    return calls
+    return result.scalars().all()  # No 404 – returns []
+
 
 # ==========================
 # ✅ Get Call by ID
@@ -187,3 +185,18 @@ async def delete_call(
         await db.rollback()
         logger.error(f"❌ Error deleting call ID {call_id}: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred while deleting the call.")
+    
+    # ==========================
+# ✅ Alias Route for /contacts/{id}/calls (frontend convenience)
+# ==========================
+@router.get("/contacts/{contact_id}/calls", response_model=List[CallOut])
+async def get_calls_by_contact_alias(
+    contact_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Convenience alias for frontend: /contacts/{id}/calls."""
+    result = await db.execute(select(Call).where(Call.contact_id == contact_id))
+    calls = result.scalars().all()
+    return calls  # Return empty list if none found – no 404
+

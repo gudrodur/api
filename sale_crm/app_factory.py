@@ -51,7 +51,8 @@ def create_app() -> FastAPI:
     app.include_router(users_router, prefix="/users", tags=["Users"])
     app.include_router(contact_status_router, prefix="/contact_status", tags=["Contact Status"])
     app.include_router(contacts_router, prefix="/contacts", tags=["Contacts"])
-    app.include_router(calls_router, prefix="/calls", tags=["Calls"])
     app.include_router(sales_router, prefix="/sales", tags=["Sales"])
+    app.include_router(calls_router, prefix="/calls", tags=["Calls"])
+
 
     return app
