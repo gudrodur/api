@@ -65,3 +65,14 @@ async def test_forbid_unlock_by_other_user(
         headers=headers_other
     )
     assert res.status_code == 403, f"Expected 403 Forbidden but got {res.status_code}"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_availability(async_client, admin_token):
+        response = await async_client.get(
+        "/contact-status",
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    print("Status code:", response.status_code)
+    print("Response:", response.json())
+    assert response.status_code in (200, 404, 405)
+

@@ -11,7 +11,8 @@ from sale_crm.schemas import ContactCreate, ContactResponse, StatusUpdateRequest
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
 
-router = APIRouter(prefix="/contacts", tags=["Contacts"])
+router = APIRouter(tags=["Contacts"])
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,15 +26,19 @@ async def get_contacts(db: AsyncSession = Depends(get_db)):
     )
     contacts = result.scalars().all()
 
-    return [
-        ContactResponse(
-            **contact.__dict__,
-            status_name=contact.status.name if contact.status else None,
-            user_id=contact.locked_by_user_id,
-            locked_by_user=UserResponse.model_validate(contact.locked_by_user) if contact.locked_by_user else None
+    response_list = []
+    for contact in contacts:
+        data = contact.__dict__.copy()
+        data["status_name"] = contact.status.name if contact.status else None
+        data["user_id"] = contact.locked_by_user_id
+        data["locked_by_user"] = (
+            UserResponse.model_validate(contact.locked_by_user)
+            if contact.locked_by_user else None
         )
-        for contact in contacts
-    ]
+        response_list.append(ContactResponse(**data))
+
+    return response_list
+
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)

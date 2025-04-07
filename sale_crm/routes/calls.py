@@ -12,8 +12,7 @@ from sale_crm.schemas import CallCreate, CallResponse
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
 
-router = APIRouter(prefix="/calls", tags=["Calls"])
-
+router = APIRouter(tags=["Calls"])
 # ✅ Initialize logger
 logger = logging.getLogger(__name__)
 

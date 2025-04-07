@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 # ==========================
 # Contact Status Enum
@@ -15,7 +15,6 @@ class ContactStatusName(str, Enum):
     unreachable = "Unreachable"
     do_not_contact = "Do Not Contact"
 
-
 # ==========================
 # Contact Status Schemas
 # ==========================
@@ -27,9 +26,7 @@ class ContactStatusResponse(BaseModel):
     id: int
     name: str
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # ==========================
 # User Schemas
@@ -56,9 +53,7 @@ class UserResponse(BaseModel):
     last_login: Optional[datetime] = None
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # ==========================
 # Contact Schemas
@@ -79,21 +74,18 @@ class ContactCreate(BaseModel):
 class ContactResponse(ContactCreate):
     id: int
     status_name: Optional[str] = None
-    user_id: Optional[int] = None  # locked_by_user_id
+    user_id: Optional[int] = None
     locked_by_user: Optional[UserResponse] = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # ==========================
 # Status Update
 # ==========================
 class StatusUpdateRequest(BaseModel):
     status_name: ContactStatusName
-
 
 # ==========================
 # Sales Schemas
@@ -113,9 +105,7 @@ class SaleResponse(SaleCreate):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # ==========================
 # Call Logs Schemas
@@ -135,5 +125,4 @@ class CallResponse(CallCreate):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

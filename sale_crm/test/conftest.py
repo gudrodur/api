@@ -1,105 +1,93 @@
-import asyncio
-import os
-import platform
-from typing import AsyncGenerator
-from datetime import datetime, timezone
-
 import pytest
-import pytest_asyncio
-from jose import jwt
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete
+from sqlalchemy.sql import text
+from sqlalchemy.future import select
+from passlib.context import CryptContext
 
-from sale_crm.app_factory import app
-from sale_crm.db import SessionLocal
-from sale_crm.models import UserDB, ContactList
-from sale_crm.auth import hash_password
+from sale_crm.main import app
+from sale_crm.db import async_session_maker
+from sale_crm.models import UserDB
+from sale_crm.auth import create_access_token
 
-SECRET_KEY = "test-secret"
-ALGORITHM = "HS256"
-
-# ✅ Use SelectorEventLoopPolicy for Windows to avoid asyncio/socket errors
-if platform.system() == "Windows":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-@pytest_asyncio.fixture
-async def async_client() -> AsyncGenerator[AsyncClient, None]:
-    """Provides an HTTPX async client bound to the FastAPI app."""
-    async with AsyncClient(app=app, base_url="http://testserver") as client:
-        yield client
+@pytest.fixture(scope="function")
+async def async_client():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        yield ac
 
 
-@pytest_asyncio.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Yields an isolated DB session for each test."""
-    async with SessionLocal() as session:
-        yield session
+@pytest.fixture(scope="function")
+async def db_session():
+    async with async_session_maker() as session:
+        try:
+            yield session
+        finally:
+            await session.rollback()  # tryggir hreint session
+            await session.close()
 
 
-@pytest_asyncio.fixture
-async def test_user_token(db_session: AsyncSession) -> str:
-    """Creates or resets a primary test user and returns a JWT token."""
-    await db_session.execute(delete(UserDB).where(UserDB.email == "tester@example.com"))
-    await db_session.commit()
-
-    user = UserDB(
-        username="tester",
-        email="tester@example.com",
-        full_name="Test User",
-        hashed_password=hash_password("test123"),
-        role="salesperson",
-        phone="+3547770000",
-        phone2=None
+@pytest.fixture(scope="function")
+async def admin_token(db_session: AsyncSession) -> str:
+    admin_user = await create_or_get_user(
+        db_session,
+        username="adminuser",
+        email="admin@example.com",
+        full_name="Admin",
+        password="adminpass",
+        role="admin"
     )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-
-    return jwt.encode({"sub": str(user.id)}, SECRET_KEY, algorithm=ALGORITHM)
+    return create_access_token(user_id=admin_user.id)
 
 
-@pytest_asyncio.fixture
-async def another_user_token(db_session: AsyncSession) -> str:
-    """Creates or resets another test user and returns a JWT token."""
-    await db_session.execute(delete(UserDB).where(UserDB.email == "another@example.com"))
-    await db_session.commit()
-
-    user = UserDB(
-        username="another",
-        email="another@example.com",
-        full_name="Other User",
-        hashed_password=hash_password("other123"),
+@pytest.fixture(scope="function")
+async def test_user_token(db_session: AsyncSession) -> str:
+    normal_user = await create_or_get_user(
+        db_session,
+        username="testuser",
+        email="test@example.com",
+        full_name="Test User",
+        password="testpass",
         role="salesperson"
     )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-
-    return jwt.encode({"sub": str(user.id)}, SECRET_KEY, algorithm=ALGORITHM)
+    return create_access_token(user_id=normal_user.id)
 
 
-@pytest_asyncio.fixture
-async def test_contact_id(db_session: AsyncSession) -> int:
-    """Creates a test contact and returns its ID."""
-    # 🧹 Delete if already exists to avoid unique key error
-    await db_session.execute(delete(ContactList).where(ContactList.phone == "+3548888888"))
-    await db_session.commit()
+async def create_or_get_user(session: AsyncSession, username: str, email: str, full_name: str, password: str, role: str):
+    result = await session.execute(select(UserDB).where(UserDB.username == username))
+    user = result.scalars().first()
+    if user:
+        return user
 
-    contact = ContactList(
-        name="Test Contact",
-        phone="+3548888888",
-        status_id=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc)
+    new_user = UserDB(
+        username=username,
+        email=email,
+        full_name=full_name,
+        hashed_password=pwd_context.hash(password),
+        role=role,
     )
-    db_session.add(contact)
-    await db_session.commit()
-    await db_session.refresh(contact)
-    return contact.id
+    session.add(new_user)
+    await session.commit()
+    await session.refresh(new_user)
+    return new_user
 
 
-@pytest.fixture(scope="session")
-def anyio_backend():
-    return 'asyncio'
+@pytest.fixture(autouse=True)
+async def cleanup_tables():
+    """Clean up database state between each test."""
+    async with async_session_maker() as session:
+        tables = [
+            "calls",
+            "sale_contacts",
+            "sales",
+            "sales_outcomes",
+            "sale_status",
+            "contact_list",
+            "contact_status",
+            "users"
+        ]
+        for table in tables:
+            await session.execute(text(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE'))
+        await session.commit()
