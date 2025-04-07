@@ -1,18 +1,20 @@
+
 # 📞 Secure Sales CRM API
 
-**Sales CRM kerfi byggt á FastAPI** með JWT auðkenningu, PostgreSQL gagnagrunnstengingu, og modular uppsetningu fyrir notendur, viðskiptavini, símtöl og sölu.
+**Sales CRM kerfi byggt á FastAPI**, með JWT auðkenningu, PostgreSQL gagnagrunnstengingu, dagsetningarsíum og modular uppsetningu fyrir notendur, tengiliði, símtöl og sölustöður.
 
 ---
 
 ## 🚀 Eiginleikar
 
-- 🔐 JWT OAuth2 auðkenning (access og refresh tokens)
-- 🧠 Async SQLAlchemy ORM fyrir PostgreSQL
-- 📞 Viðskiptavinir, símtöl og söluferli með stöðuyfirliti
-- 🧩 Modular router uppbygging (users, contacts, calls, sales)
-- 🧪 Pytest testkerfi og prófunargögn
-- 🌍 CORS, .env stuðningur, og líftíma-stýring
-- 📝 Pydantic skemu fyrir validation og OpenAPI
+- 🔐 **JWT OAuth2 auðkenning** með `access` og `refresh` tokens (via `AuthInterceptor` í framenda)
+- 🧠 **Async SQLAlchemy ORM** fyrir PostgreSQL með `AsyncSession` og Alembic
+- 📞 **Símtalaskrá með sjálfvirkri tengiliðastöðu-uppfærslu** út frá `disposition`
+- 📅 **Date filtering** fyrir símtalaleit með `from` og `to` query-parametrum
+- 🧩 **Modular route uppbygging** (`users`, `contacts`, `calls`, `sales`, `statuses`)
+- 🧪 **Pytest einingaprófanir** og `populate_database.py` fyrir testgögn
+- 🌍 **CORS, .env stuðningur, líftímaviðföng (`lifespan`)**
+- 📝 **Pydantic skemu** fyrir input validation og sjálfvirka OpenAPI skjölun
 
 ---
 
@@ -27,7 +29,7 @@ cd api
 2. **Búðu til virtual environment:**
 ```bash
 python -m venv venv
-source venv/bin/activate  # eða .\venv\Scripts\activate á Windows
+source venv/bin/activate  # á Windows: .\venv\Scripts\activate
 ```
 
 3. **Settu upp pakkana:**
@@ -35,11 +37,11 @@ source venv/bin/activate  # eða .\venv\Scripts\activate á Windows
 pip install -r requirements.txt
 ```
 
-4. **Settu upp .env skrá (sjá dæmi neðar)**
+4. **Settu upp `.env` skrá (sjá dæmi neðar)**
 
-5. **Keyrðu verkefnið:**
+5. **Ræstu appið með Uvicorn:**
 ```bash
-uvicorn main:app --reload
+uvicorn sale_crm.main:app --reload
 ```
 
 ---
@@ -65,25 +67,35 @@ ALLOWED_ORIGINS=http://localhost:3000
 
 ---
 
-## 🗂️ Verkefnistré
+## 📂 Verkefnistré
 
 ```bash
 api/
 ├── sale_crm/
 │   ├── models/               # SQLAlchemy ORM módel
-│   ├── routes/               # API endpointar
-│   ├── auth.py               # JWT & login
-│   ├── db.py                 # DB tengingar
-│   ├── schemas.py            # Pydantic skemu
-│   ├── app_factory.py        # Býr til app
-│   └── main.py               # Ræsir appið
-├── populate_database.py      # Test gögn
+│   ├── routes/               # API route modules
+│   ├── auth.py               # Login, token handling, hashing
+│   ├── db.py                 # Gagnagrunnstenging og session config
+│   ├── schemas.py            # Pydantic input/output skemu
+│   ├── app_factory.py        # FastAPI app setup og middleware
+│   ├── main.py               # Tengir app, routers og CORS
+│   └── test/                 # Pytest einingaprófanir
+├── start                    # Ræsi-skrá fyrir powershell eða bash
+├── run.py                   # Entry point (ef ekki notað `main`)
+├── populate_database.py     # Fyllir test/demo gögn
+├── setup_db.py              # Init gagnagrunns og töflur
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
+## 📚 Athugið
+
+> Allar requests sem þurfa auðkenningu **treysta á virkt `AuthInterceptor`** í framenda. Tryggðu að Authorization haus sé settur sjálfvirkt í öllum köllum.
+
+---
+
 ## 📬 Hafðu samband
 
-> Unnið af `gudrodur` – velkomið að senda PR, athugasemdir eða skila hugmyndum!
+> Verkefni eftir `@gudrodur` – velkomið að senda PR, athugasemdir eða skila hugmyndum!

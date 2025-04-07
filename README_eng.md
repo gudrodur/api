@@ -1,24 +1,26 @@
+
 # 📞 Secure Sales CRM API
 
-A full-featured **Sales CRM system built with FastAPI**, using JWT-based authentication, PostgreSQL with async SQLAlchemy ORM, and modular routing for users, contacts, calls, and sales.
+A modern, modular CRM system built with **FastAPI**, JWT authentication, PostgreSQL backend, and comprehensive call/contact/sales tracking.
 
 ---
 
 ## 🚀 Features
 
-- 🔐 JWT OAuth2 login (access + refresh tokens)
-- 🧠 Async SQLAlchemy ORM with PostgreSQL backend
-- 📞 Contact, Call, and Sale lifecycle management
-- 🧩 Modular route structure (users, contacts, calls, sales)
-- 🧪 Built-in testing with Pytest and demo data
-- 🌍 CORS, environment config via `.env`, and lifecycle logging
-- 📝 Pydantic validation schemas with full OpenAPI support
+- 🔐 **JWT OAuth2 authentication** with access and refresh tokens (assumes frontend AuthInterceptor)
+- 🧠 **Async SQLAlchemy ORM** with PostgreSQL and Alembic migrations
+- 📞 **Call logging** with auto-updated contact status based on disposition
+- 📅 **Date filtering support** on call history using `from` and `to` query parameters
+- 🧩 **Modular route design** (`users`, `contacts`, `calls`, `sales`, `statuses`)
+- 🧪 **Unit tests with Pytest** and seed test data
+- 🌍 **CORS, .env config, and FastAPI lifespan management**
+- 📝 **Pydantic schemas** for input validation and OpenAPI documentation
 
 ---
 
-## 🛠️ Setup
+## 🛠️ Setup Instructions
 
-1. **Clone the repo:**
+1. **Clone the repository:**
 ```bash
 git clone https://github.com/gudrodur/api.git
 cd api
@@ -27,7 +29,7 @@ cd api
 2. **Create a virtual environment:**
 ```bash
 python -m venv venv
-source venv/bin/activate  # Or .\venv\Scripts\activate on Windows
+source venv/bin/activate  # On Windows: .\venv\Scripts\activate
 ```
 
 3. **Install dependencies:**
@@ -35,16 +37,16 @@ source venv/bin/activate  # Or .\venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
-4. **Create your `.env` file (see below)**
+4. **Configure your `.env` file (see example below)**
 
-5. **Run the API:**
+5. **Run the application:**
 ```bash
-uvicorn main:app --reload
+uvicorn sale_crm.main:app --reload
 ```
 
 ---
 
-## 🧪 Run Tests
+## 🧪 Testing
 
 ```bash
 pytest
@@ -52,7 +54,7 @@ pytest
 
 ---
 
-## 🔐 .env Example
+## 🔐 Example .env File
 
 ```env
 DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/sales_crm
@@ -65,25 +67,35 @@ ALLOWED_ORIGINS=http://localhost:3000
 
 ---
 
-## 🗂️ Project Structure
+## 📂 Project Structure
 
 ```bash
 api/
 ├── sale_crm/
 │   ├── models/               # SQLAlchemy ORM models
-│   ├── routes/               # FastAPI routes
-│   ├── auth.py               # JWT & authentication logic
-│   ├── db.py                 # Database engine and session
-│   ├── schemas.py            # Pydantic models
-│   ├── app_factory.py        # App factory with middleware
-│   └── main.py               # Entrypoint to start API
-├── populate_database.py      # Inserts demo/test data
+│   ├── routes/               # API route modules
+│   ├── auth.py               # JWT authentication & login
+│   ├── db.py                 # Database configuration
+│   ├── schemas.py            # Pydantic request/response models
+│   ├── app_factory.py        # FastAPI app setup
+│   ├── main.py               # Entry point with routing & CORS
+│   └── test/                 # Unit tests
+├── start                    # Startup script for powershell/bash
+├── run.py                   # App entry point (legacy)
+├── populate_database.py     # Seed test/demo data
+├── setup_db.py              # Initialize database schema
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
+## 📚 Note
+
+> All secured endpoints **require `AuthInterceptor`** in the frontend. It is assumed that the Authorization header is injected automatically in all API calls.
+
+---
+
 ## 📬 Contact
 
-> Created by `gudrodur` – PRs, issues, and feedback welcome!
+> Project by `@gudrodur` – PRs and feedback welcome!
