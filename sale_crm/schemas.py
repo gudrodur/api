@@ -120,9 +120,18 @@ class CallCreate(BaseModel):
     disposition: Optional[str] = None
 
 
-class CallResponse(CallCreate):
+class CallResponse(BaseModel):
     id: int
+    user_id: int
+    contact_id: int
+    duration: Optional[int] = None
+    disposition: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    call_time: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
+

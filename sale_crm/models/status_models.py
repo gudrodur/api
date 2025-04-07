@@ -24,5 +24,6 @@ class SaleStatus(Base):
 
 class SalesOutcome(Base):
     __tablename__ = "sales_outcomes"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, nullable=False)
+    id = Column(Integer, primary_key=True)
+    description = Column(String, nullable=False)
+

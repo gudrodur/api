@@ -12,7 +12,6 @@ from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
 
 router = APIRouter(tags=["Contacts"])
-
 logger = logging.getLogger(__name__)
 
 
@@ -29,16 +28,19 @@ async def get_contacts(db: AsyncSession = Depends(get_db)):
     response_list = []
     for contact in contacts:
         data = contact.__dict__.copy()
+        data.pop("locked_by_user", None)
+        data.pop("status", None)
+
         data["status_name"] = contact.status.name if contact.status else None
         data["user_id"] = contact.locked_by_user_id
         data["locked_by_user"] = (
             UserResponse.model_validate(contact.locked_by_user)
             if contact.locked_by_user else None
         )
+
         response_list.append(ContactResponse(**data))
 
     return response_list
-
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)
@@ -57,12 +59,18 @@ async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db))
         logger.warning(f"❌ Contact ID {contact_id} not found.")
         raise HTTPException(status_code=404, detail="Contact not found")
 
-    return ContactResponse(
-        **contact.__dict__,
-        status_name=contact.status.name if contact.status else None,
-        user_id=contact.locked_by_user_id,
-        locked_by_user=UserResponse.model_validate(contact.locked_by_user) if contact.locked_by_user else None
+    data = contact.__dict__.copy()
+    data.pop("locked_by_user", None)
+    data.pop("status", None)
+
+    data["status_name"] = contact.status.name if contact.status else None
+    data["user_id"] = contact.locked_by_user_id
+    data["locked_by_user"] = (
+        UserResponse.model_validate(contact.locked_by_user)
+        if contact.locked_by_user else None
     )
+
+    return ContactResponse(**data)
 
 
 @router.patch("/{contact_id}/status", status_code=204)
@@ -81,7 +89,6 @@ async def update_contact_status(
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found.")
 
-    # Check if contact is currently locked
     current_status = None
     if contact.status_id:
         result = await db.execute(select(ContactStatus).where(ContactStatus.id == contact.status_id))
@@ -93,7 +100,6 @@ async def update_contact_status(
             detail="You do not have permission to update status on a locked contact owned by another user."
         )
 
-    # Set new status
     result = await db.execute(select(ContactStatus).where(ContactStatus.name == new_status_name))
     new_status = result.scalars().first()
 
@@ -125,12 +131,19 @@ async def get_locked_contacts(db: AsyncSession = Depends(get_db)):
     )
     contacts = result.scalars().all()
 
-    return [
-        ContactResponse(
-            **contact.__dict__,
-            status_name=contact.status.name if contact.status else None,
-            user_id=contact.locked_by_user_id,
-            locked_by_user=UserResponse.model_validate(contact.locked_by_user) if contact.locked_by_user else None
+    response_list = []
+    for contact in contacts:
+        data = contact.__dict__.copy()
+        data.pop("locked_by_user", None)
+        data.pop("status", None)
+
+        data["status_name"] = contact.status.name if contact.status else None
+        data["user_id"] = contact.locked_by_user_id
+        data["locked_by_user"] = (
+            UserResponse.model_validate(contact.locked_by_user)
+            if contact.locked_by_user else None
         )
-        for contact in contacts
-    ]
+
+        response_list.append(ContactResponse(**data))
+
+    return response_list

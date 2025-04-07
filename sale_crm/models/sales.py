@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Numeric
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, Numeric, String
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from .base import Base
@@ -12,7 +12,10 @@ class Sale(Base):
     status_id = Column(Integer, ForeignKey("sale_status.id"))
     outcome_id = Column(Integer, ForeignKey("sales_outcomes.id"))
 
+    expected_closure_date = Column(DateTime(timezone=True), nullable=True)
+    payment_status = Column(String, nullable=True)
     deal_value = Column(Numeric, nullable=True)
+    sale_amount = Column(Numeric(12, 2), nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 

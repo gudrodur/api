@@ -44,7 +44,7 @@ async def create_sale(
 
         # ✅ Validate outcome (if provided)
         if sale.outcome_id:
-            outcome = await db.get(SalesOutcomes, sale.outcome_id)
+            outcome = await db.get(SalesOutcome, sale.outcome_id)
             if not outcome:
                 raise HTTPException(status_code=404, detail="Sale outcome not found.")
 

@@ -4,3 +4,4 @@ from .contacts import Contact
 from .calls import Call
 from .sales import Sale
 from .status_models import SaleStatus, SalesOutcome, ContactStatus, ContactStatusEnum
+from .sale_contacts import SaleContact
