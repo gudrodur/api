@@ -1,6 +1,12 @@
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 from .base import Base
+from enum import Enum
+
+class ContactStatusEnum(str, Enum):
+    NEW = "new"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
 
 class ContactStatus(Base):
     __tablename__ = "contact_status"
