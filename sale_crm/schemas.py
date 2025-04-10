@@ -133,7 +133,7 @@ class CallResponse(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+       from_attributes = True
 
 class CallOut(BaseModel):
     id: int
@@ -148,6 +148,13 @@ class CallOut(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+       from_attributes = True
 
+class LoginResponse(BaseModel):
+    id: int
+    username: str
+    full_name: str
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
 

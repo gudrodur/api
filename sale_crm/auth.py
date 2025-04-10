@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -11,6 +11,7 @@ from sqlalchemy.future import select
 
 from sale_crm.db import get_db
 from sale_crm.models import User
+from sale_crm.schemas import LoginResponse
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
@@ -46,7 +47,7 @@ def create_refresh_token(user_id: int) -> str:
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-@router.post("/token")
+@router.post("/token", response_model=LoginResponse)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
 ):
@@ -60,16 +61,24 @@ async def login_for_access_token(
     user.last_login = datetime.now(timezone.utc)
     await db.commit()
 
-    return {
-        "id": user.id,
-        "access_token": create_access_token(user_id=user.id),
-        "refresh_token": create_refresh_token(user_id=user.id),
-        "token_type": "bearer"
-    }
+    return LoginResponse(
+        id=user.id,
+        username=user.username,
+        full_name=user.full_name,
+        access_token=create_access_token(user_id=user.id),
+        refresh_token=create_refresh_token(user_id=user.id),
+        token_type="bearer"
+    )
 
 
 @router.post("/refresh")
-async def refresh_access_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
+async def refresh_access_token(
+    token_data: dict = Body(...), db: AsyncSession = Depends(get_db)
+):
+    refresh_token = token_data.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Missing refresh_token")
+
     try:
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload.get("sub"))
@@ -80,11 +89,17 @@ async def refresh_access_token(refresh_token: str, db: AsyncSession = Depends(ge
         if not user:
             raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-        return {"access_token": create_access_token(user_id=user.id), "token_type": "bearer"}
+        logger.info(f"🔁 Token refreshed for user_id={user_id}")
+        return {
+            "access_token": create_access_token(user_id=user.id),
+            "refresh_token": create_refresh_token(user_id=user.id),
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        }
 
     except JWTError:
         logger.warning("❌ Invalid refresh token attempt")
-        raise HTTPException(status_code=403, detail="Could not validate refresh token")
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
@@ -99,7 +114,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
 
         return user
     except JWTError:
-        raise HTTPException(status_code=403, detail="Could not validate credentials")
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 
 async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
@@ -107,7 +122,7 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=403, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Invalid token")
         return int(user_id)
     except JWTError:
-        raise HTTPException(status_code=403, detail="Could not validate credentials")
+        raise HTTPException(status_code=401, detail="Could not validate credentials")

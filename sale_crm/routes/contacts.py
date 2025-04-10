@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
@@ -14,15 +15,33 @@ from sale_crm.auth import get_current_user
 router = APIRouter(tags=["Contacts"])
 logger = logging.getLogger(__name__)
 
-
 @router.get("/", response_model=List[ContactResponse])
-async def get_contacts(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Contact).options(
-            joinedload(Contact.status),
-            joinedload(Contact.locked_by_user)
-        )
+async def get_contacts(
+    sort_by: str = Query("name", enum=["name", "status_name", "created_at", "updated_at"]),
+    order: str = Query("asc", enum=["asc", "desc"]),
+    db: AsyncSession = Depends(get_db),
+):
+    sort_mapping = {
+        "name": Contact.name,
+        "created_at": Contact.created_at,
+        "updated_at": Contact.updated_at,
+        "status_name": ContactStatus.name,
+    }
+
+    direction = asc if order == "asc" else desc
+    sort_column = sort_mapping.get(sort_by, Contact.name)
+
+    query = select(Contact).options(
+        joinedload(Contact.status),
+        joinedload(Contact.locked_by_user)
     )
+
+    if sort_by == "status_name":
+        query = query.join(Contact.status)
+
+    query = query.order_by(direction(sort_column))
+
+    result = await db.execute(query)
     contacts = result.scalars().all()
 
     response_list = []
@@ -41,6 +60,7 @@ async def get_contacts(db: AsyncSession = Depends(get_db)):
         response_list.append(ContactResponse(**data))
 
     return response_list
+
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)
