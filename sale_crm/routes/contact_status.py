@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 import logging
 from typing import List
 
-from sale_crm.models import ContactStatus, ContactStatusEnum, User
-from sale_crm.schemas import ContactStatusCreate, ContactStatusResponse
+from sale_crm.models import ContactStatus, User
+from sale_crm.schemas import ContactStatusCreate, ContactStatusResponse, ContactStatusName
 from sale_crm.db import get_db
 from sale_crm.auth import get_current_user
 
@@ -27,15 +27,18 @@ async def create_contact_status(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can create contact statuses.")
 
-    status_name = status.name.strip()
+    # Normalize input
+    status_name = status.name.strip().lower()
 
-    # ✅ Check enum compliance (must match one of ContactStatusEnum values)
-    if status_name not in [e.value for e in ContactStatusEnum]:
+    # ✅ Enum compliance check
+    valid_values = [e.value for e in ContactStatusName]
+    if status_name not in valid_values:
         raise HTTPException(
             status_code=422,
-            detail=f"Status '{status_name}' is not allowed. Valid values: {', '.join(e.value for e in ContactStatusEnum)}"
+            detail=f"Status '{status_name}' is not allowed. Valid values: {', '.join(valid_values)}"
         )
 
+    # Check for duplicates
     existing_status = await db.execute(select(ContactStatus).where(ContactStatus.name == status_name))
     if existing_status.scalars().first():
         raise HTTPException(status_code=400, detail=f"Contact status '{status_name}' already exists.")
@@ -48,7 +51,7 @@ async def create_contact_status(
         await db.refresh(new_status)
 
         logger.info(f"✅ Contact status '{status_name}' created by admin {current_user.username}.")
-        return new_status
+        return ContactStatusResponse(statusName=new_status.name)
 
     except IntegrityError:
         await db.rollback()
@@ -64,8 +67,8 @@ async def create_contact_status(
 # ==========================
 # ✅ Get All Contact Statuses
 # ==========================
-@router.get("/", response_model=List[ContactStatusResponse])
-async def get_all_contact_statuses(
+@router.get("/", response_model=List[ContactStatusResponse], response_model_by_alias=True)
+async def get_contact_statuses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -76,5 +79,13 @@ async def get_all_contact_statuses(
     if not statuses:
         raise HTTPException(status_code=404, detail="No contact statuses found.")
 
+    # 🔍 Log ORM objects
+    for i, s in enumerate(statuses):
+        logger.debug(f"[Status #{i}] id={s.id}, name={getattr(s, 'name', '❌ MISSING')}")
+
     logger.info(f"🔍 User {current_user.username} retrieved {len(statuses)} contact statuses.")
-    return statuses
+
+    # ✅ Manual mapping into response model
+    response_models = [ContactStatusResponse(statusName=s.name) for s in statuses]
+
+    return response_models

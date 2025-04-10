@@ -1,19 +1,22 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field
+from pydantic.config import ConfigDict
+
 
 # ==========================
 # Contact Status Enum
 # ==========================
 class ContactStatusName(str, Enum):
-    new = "New"
-    exclusive_lock = "Exclusive Lock"
-    follow_up = "Follow Up"
-    closed = "Closed"
-    unreachable = "Unreachable"
-    do_not_contact = "Do Not Contact"
+    new = "new"
+    exclusive_lock = "exclusive_lock"
+    follow_up = "follow_up"
+    closed = "closed"
+    unreachable = "unreachable"
+    do_not_contact = "do_not_contact"
+
 
 # ==========================
 # Contact Status Schemas
@@ -23,10 +26,13 @@ class ContactStatusCreate(BaseModel):
 
 
 class ContactStatusResponse(BaseModel):
-    id: int
-    name: str
+    statusName: str = Field(..., alias="name")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True
+    )
+
 
 # ==========================
 # User Schemas
@@ -55,6 +61,7 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 # ==========================
 # Contact Schemas
 # ==========================
@@ -73,19 +80,24 @@ class ContactCreate(BaseModel):
 
 class ContactResponse(ContactCreate):
     id: int
-    status_name: Optional[str] = None
+    statusName: Optional[str] = Field(None, alias="status_name")
     user_id: Optional[int] = None
     locked_by_user: Optional[UserResponse] = None
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True
+    )
+
 
 # ==========================
 # Status Update
 # ==========================
 class StatusUpdateRequest(BaseModel):
     status_name: ContactStatusName
+
 
 # ==========================
 # Sales Schemas
@@ -106,6 +118,7 @@ class SaleResponse(SaleCreate):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 # ==========================
 # Call Logs Schemas
@@ -132,8 +145,8 @@ class CallResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-       from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CallOut(BaseModel):
     id: int
@@ -147,9 +160,12 @@ class CallOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-       from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
+
+# ==========================
+# Auth Response
+# ==========================
 class LoginResponse(BaseModel):
     id: int
     username: str
@@ -157,4 +173,3 @@ class LoginResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
-
