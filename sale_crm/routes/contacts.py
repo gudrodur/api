@@ -93,50 +93,45 @@ async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db))
     return ContactResponse(**data)
 
 
-@router.patch("/{contact_id}/status", status_code=204)
+from fastapi import status
+from pydantic import BaseModel
+
+class MessageResponse(BaseModel):
+    message: str
+
+@router.patch("/{contact_id}/status", status_code=status.HTTP_200_OK, response_model=MessageResponse)
 async def update_contact_status(
     contact_id: int,
-    payload: StatusUpdateRequest,
+    status_update: StatusUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    new_status_name = payload.status_name.strip()
+    """Update the status of a contact using status_id (recommended)."""
+    if status_update.status_id <= 0:
+        raise HTTPException(status_code=422, detail="Invalid status ID")
 
-    if not new_status_name:
-        raise HTTPException(status_code=400, detail="Status name must not be empty.")
-
-    contact = await db.get(Contact, contact_id)
+    result = await db.execute(select(Contact).where(Contact.id == contact_id))
+    contact = result.scalar_one_or_none()
     if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found.")
+        raise HTTPException(status_code=404, detail=f"Contact ID {contact_id} not found.")
 
-    current_status = None
-    if contact.status_id:
-        result = await db.execute(select(ContactStatus).where(ContactStatus.id == contact.status_id))
-        current_status = result.scalars().first()
-
-    if current_status and current_status.name == "Exclusive Lock" and contact.locked_by_user_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to update status on a locked contact owned by another user."
-        )
-
-    result = await db.execute(select(ContactStatus).where(ContactStatus.name == new_status_name))
-    new_status = result.scalars().first()
-
+    result = await db.execute(select(ContactStatus).where(ContactStatus.id == status_update.status_id))
+    new_status = result.scalar_one_or_none()
     if not new_status:
-        raise HTTPException(status_code=404, detail=f"Status '{new_status_name}' not found.")
+        raise HTTPException(status_code=404, detail=f"Status ID {status_update.status_id} not found.")
 
     contact.status_id = new_status.id
     contact.updated_at = datetime.now(timezone.utc)
 
-    if new_status.name == "Exclusive Lock":
-        contact.locked_by_user_id = current_user.id
-    else:
-        contact.locked_by_user_id = None
-
     await db.commit()
-    logger.info(f"✅ Contact {contact.id} status set to '{new_status_name}' by user '{current_user.username}'.")
+    await db.refresh(contact)
 
+    logger.info(
+        f"✅ User {current_user.username} updated contact {contact_id} to status "
+        f"'{new_status.name}' (ID {new_status.id})"
+    )
+
+    return {"message": f"Contact {contact_id} status updated successfully."}
 
 @router.get("/locked", response_model=List[ContactResponse])
 async def get_locked_contacts(db: AsyncSession = Depends(get_db)):

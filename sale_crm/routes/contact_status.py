@@ -67,7 +67,7 @@ async def create_contact_status(
 # ==========================
 # ✅ Get All Contact Statuses
 # ==========================
-@router.get("/", response_model=List[ContactStatusResponse], response_model_by_alias=True)
+@router.get("/", response_model=List[ContactStatusResponse])
 async def get_contact_statuses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -79,13 +79,11 @@ async def get_contact_statuses(
     if not statuses:
         raise HTTPException(status_code=404, detail="No contact statuses found.")
 
-    # 🔍 Log ORM objects
+    # Optional: log each object
     for i, s in enumerate(statuses):
-        logger.debug(f"[Status #{i}] id={s.id}, name={getattr(s, 'name', '❌ MISSING')}")
+        logger.debug(f"[Status #{i}] id={s.id}, name={s.name}")
 
     logger.info(f"🔍 User {current_user.username} retrieved {len(statuses)} contact statuses.")
+    
+    return statuses
 
-    # ✅ Manual mapping into response model
-    response_models = [ContactStatusResponse(statusName=s.name) for s in statuses]
-
-    return response_models

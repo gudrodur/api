@@ -26,12 +26,11 @@ class ContactStatusCreate(BaseModel):
 
 
 class ContactStatusResponse(BaseModel):
-    statusName: str = Field(..., alias="name")
+    id: int
+    name: str  # or: statusName: str = Field(..., alias="name")
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True
-    )
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 # ==========================
@@ -96,8 +95,7 @@ class ContactResponse(ContactCreate):
 # Status Update
 # ==========================
 class StatusUpdateRequest(BaseModel):
-    status_name: ContactStatusName
-
+    status_id: int
 
 # ==========================
 # Sales Schemas
