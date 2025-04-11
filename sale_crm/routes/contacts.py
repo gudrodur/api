@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -61,10 +62,12 @@ async def get_contacts(
 
     return response_list
 
-
-
 @router.get("/{contact_id}", response_model=ContactResponse)
-async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db)):
+async def get_contact_by_id(
+    contact_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     result = await db.execute(
         select(Contact)
         .where(Contact.id == contact_id)
@@ -73,11 +76,21 @@ async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db))
             joinedload(Contact.locked_by_user)
         )
     )
-    contact = result.scalars().first()
+    contact = result.scalar_one_or_none()
 
     if not contact:
         logger.warning(f"❌ Contact ID {contact_id} not found.")
         raise HTTPException(status_code=404, detail="Contact not found")
+
+    # 🧠 Auto-lock if not already locked
+    if contact.locked_by_user_id is None and (contact.status_id == 1):  # status_id == 1 ➜ "New"
+        contact.status_id = 2  # status_id == 2 ➜ "Exclusive Lock"
+        contact.locked_by_user_id = current_user.id
+        contact.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(contact)
+
+        logger.info(f"🔒 Contact ID {contact_id} auto-locked by user '{current_user.username}'.")
 
     data = contact.__dict__.copy()
     data.pop("locked_by_user", None)
@@ -93,8 +106,6 @@ async def get_contact_by_id(contact_id: int, db: AsyncSession = Depends(get_db))
     return ContactResponse(**data)
 
 
-from fastapi import status
-from pydantic import BaseModel
 
 class MessageResponse(BaseModel):
     message: str
